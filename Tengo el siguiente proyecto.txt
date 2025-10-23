@@ -1,0 +1,1034 @@
+Tengo el siguiente proyecto
+
+
+
+¡Absolutamente! Aquí tienes la guía definitiva y completa, paso a paso, desde un sistema completamente limpio hasta tener tu aplicación funcionando con la nueva base de datos relacional. No se omite ni un solo comando o línea de código.
+
+Paso 1: Preparación del Entorno (Desde Cero) 🖥️
+
+Si ya tienes alguno de estos programas, puedes saltar esa parte.
+
+Instalar Node.js:
+
+Ve a la página oficial de Node.js.
+
+Descarga la versión LTS (Recomendada para la mayoría de los usuarios) y sigue los pasos del instalador.
+
+Para verificar que se instaló correctamente, abre el Símbolo del sistema (CMD) o PowerShell y ejecuta:
+
+Bash
+
+
+
+node -v
+
+npm -v
+
+Deberías ver los números de las versiones.
+
+Instalar Visual Studio Code (VS Code):
+
+Ve al sitio web oficial de VS Code.
+
+Descarga el instalador y ejecútalo.
+
+Instalar PostgreSQL:
+
+Ve a la página de descargas de PostgreSQL.
+
+Descarga el instalador para Windows y ejecútalo.
+
+¡MUY IMPORTANTE! Durante la instalación, te pedirá que crees una contraseña para el superusuario postgres. Anótala y no la olvides, la necesitarás en cada paso. El resto de las opciones déjalas por defecto.
+
+Paso 2: Creación y Configuración de la Base de Datos 🐘
+
+Ahora vamos a crear la estructura de tablas que te enviaron, pero traducida a PostgreSQL.
+
+Abrir la Consola de PostgreSQL (psql):
+
+Busca en el menú de inicio de Windows "SQL Shell (psql)" y ábrelo.
+
+Te pedirá varios datos. Simplemente presiona Enter para aceptar los valores por defecto (Server [localhost], Database [postgres], Port [5432], Username [postgres]).
+
+Cuando te pida la contraseña (Password for user postgres:), escribe la que creaste durante la instalación.
+
+Crear la Base de Datos:
+
+Dentro de la consola de psql, que ahora te muestra un prompt como postgres=#, ejecuta el siguiente comando para crear tu base de datos:
+
+SQL
+
+
+
+CREATE DATABASE dispositivos_db;
+
+Conectarse a la Nueva Base de Datos:
+
+Ahora, conéctate a la base de datos que acabas de crear con el comando:
+
+SQL
+
+
+
+\c dispositivos_db
+
+El prompt cambiará a dispositivos_db=#.
+
+Crear todas las Tablas:
+
+Copia el bloque de código SQL completo que aparece a continuación, pégalo directamente en la consola de psql y presiona Enter. Esto ejecutará todos los comandos de una vez y creará toda la estructura.
+
+SQL
+
+
+
+-- TABLA DE USUARIOSCREATE TABLE usuario (
+
+usr_id SERIAL PRIMARY KEY,
+
+nombre VARCHAR(50),
+
+correo VARCHAR(50) NOT NULL UNIQUE,
+
+clave VARCHAR(255) NOT NULL
+
+);-- TABLA DE DISPOSITIVOSCREATE TABLE dispositivo (
+
+dsp_id SERIAL PRIMARY KEY,
+
+modelo VARCHAR(50) NOT NULL,
+
+tipo VARCHAR(20) NOT NULL,
+
+serie VARCHAR(50) NOT NULL,
+
+marca VARCHAR(50),
+
+estatus CHAR(1) NOT NULL, -- 'A' para Activo, 'I' para Inactivo
+
+fecha_creacion TIMESTAMPTZ DEFAULT NOW()
+
+);-- TABLA DE PARÁMETROS (Ej: Temperatura, Humedad, etc.)CREATE TABLE parametros (
+
+prt_id SERIAL PRIMARY KEY,
+
+nombre VARCHAR(20) NOT NULL,
+
+tipo VARCHAR(20) NOT NULL,
+
+unidad VARCHAR(10),
+
+valormin NUMERIC(10, 2),
+
+valormax NUMERIC(10, 2),
+
+valorini NUMERIC(10, 2)
+
+);-- TABLA INTERMEDIA: QUÉ PARÁMETROS MIDE CADA DISPOSITIVOCREATE TABLE dispositivo_parametro (
+
+dsp_id INT NOT NULL,
+
+prt_id INT NOT NULL,
+
+PRIMARY KEY (dsp_id, prt_id),
+
+FOREIGN KEY (dsp_id) REFERENCES dispositivo (dsp_id) ON DELETE CASCADE,
+
+FOREIGN KEY (prt_id) REFERENCES parametros (prt_id) ON DELETE CASCADE
+
+);-- TABLA DE REGISTRO: VINCULA USUARIO, DISPOSITIVO Y TOPIC MQTTCREATE TABLE registro (
+
+rgt_id SERIAL PRIMARY KEY,
+
+usr_id INT NOT NULL,
+
+dsp_id INT NOT NULL,
+
+app_id INT, -- Aún no se usa, pero lo dejamos
+
+topic VARCHAR(100) NOT NULL UNIQUE,
+
+FOREIGN KEY (usr_id) REFERENCES usuario (usr_id),
+
+FOREIGN KEY (dsp_id) REFERENCES dispositivo (dsp_id) ON DELETE CASCADE
+
+);-- TABLA DE CABECERA DE MENSAJESCREATE TABLE mensajes (
+
+msg_id SERIAL PRIMARY KEY,
+
+rgt_id INT NOT NULL,
+
+fecha TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+status INT NOT NULL, -- 1 para recibido, 0 para error
+
+FOREIGN KEY (rgt_id) REFERENCES registro (rgt_id) ON DELETE CASCADE
+
+);-- TABLA DE DETALLE DE MENSAJES (VALORES DE LOS PARÁMETROS)CREATE TABLE parametros_mensajes (
+
+msg_id INT NOT NULL,
+
+prt_id INT NOT NULL,
+
+valor NUMERIC(10, 2) NOT NULL,
+
+PRIMARY KEY (msg_id, prt_id),
+
+FOREIGN KEY (msg_id) REFERENCES mensajes (msg_id) ON DELETE CASCADE,
+
+FOREIGN KEY (prt_id) REFERENCES parametros (prt_id) ON DELETE CASCADE
+
+);-- COMENTARIOS
+
+COMMENT ON COLUMN dispositivo.estatus IS 'Estatus del dispositivo: A (Activo), I (Inactivo)';
+
+COMMENT ON COLUMN mensajes.status IS 'Estatus del mensaje: 1 (Procesado), 0 (Error)';
+
+¡Listo! Tu base de datos está creada y estructurada correctamente. Puedes cerrar la ventana de psql.
+
+Paso 3: Creación del Proyecto Node.js ⚙️
+
+Crear la Carpeta del Proyecto:
+
+Crea una carpeta en un lugar fácil de encontrar (ej: en tu Escritorio) y llámala api_dispositivos.
+
+Abrir el Proyecto en VS Code:
+
+Abre VS Code, ve a Archivo -> Abrir carpeta... y selecciona la carpeta api_dispositivos.
+
+Abrir la Terminal en VS Code:
+
+Dentro de VS Code, ve a Terminal -> Nueva terminal. Una consola se abrirá en la parte inferior.
+
+Inicializar el Proyecto:
+
+En la terminal de VS Code, ejecuta el siguiente comando para crear el archivo package.json:
+
+Bash
+
+
+
+npm init -y
+
+Instalar Dependencias:
+
+Ahora, instala todos los paquetes de Node.js que necesitamos con este comando:
+
+Bash
+
+
+
+npm install express pg dotenv mqtt
+
+Paso 4: Escribir el Código de la Aplicación 📝
+
+Ahora crearemos los archivos de nuestro proyecto uno por uno.
+
+Crear el archivo .gitignore:
+
+Este archivo le dice a Git qué carpetas ignorar (¡muy importante!).
+
+Haz clic derecho en el explorador de archivos de VS Code y selecciona Nuevo archivo. Nómbralo .gitignore.
+
+Pega el siguiente contenido dentro:
+
+Fragmento de código
+
+
+
+# Dependencias
+
+/node_modules
+
+
+
+# Variables de entorno
+
+.env
+
+Crear el archivo .env:
+
+Crea otro archivo llamado .env para guardar tus credenciales.
+
+Pega el siguiente contenido y reemplaza los valores con los tuyos (especialmente tu contraseña).
+
+Fragmento de código
+
+
+
+# Configuración de la Base de Datos PostgreSQL
+
+DB_USER=postgres
+
+DB_HOST=localhost
+
+DB_DATABASE=dispositivos_db
+
+DB_PASSWORD=AQUI_VA_TU_CONTRASEÑA_DE_POSTGRES
+
+DB_PORT=5432
+
+
+
+# Configuración del Broker MQTT (usamos uno público para pruebas)
+
+MQTT_BROKER_URL=mqtt://broker.hivemq.com
+
+Crear el archivo principal index.js:
+
+Finalmente, crea el archivo index.js.
+
+Copia y pega todo el siguiente código dentro de este archivo. Este es el cerebro de tu aplicación.
+
+JavaScript
+
+
+
+// Cargar las variables de entorno desde el archivo .envrequire('dotenv').config();// Importar las librerías necesariasconst express = require('express');const { Pool } = require('pg');const mqtt = require('mqtt');// --- CONFIGURACIÓN ---const app = express();
+
+app.use(express.json()); // Middleware para que Express entienda peticiones JSON// Configurar la conexión a la base de datos usando las variables del .envconst pool = new Pool({
+
+user: process.env.DB_USER,
+
+host: process.env.DB_HOST,
+
+database: process.env.DB_DATABASE,
+
+password: process.env.DB_PASSWORD,
+
+port: process.env.DB_PORT,
+
+});// ===================================================================================// ENDPOINT DE API: REGISTRO DE UN NUEVO DISPOSITIVO// Este endpoint solo crea la entidad del dispositivo.// ===================================================================================
+
+app.post('/dispositivo', async (req, res) => {
+
+const { modelo, tipo, serie, marca, estatus } = req.body;
+
+
+
+// Validación de datos de entrada
+
+if (!modelo || !tipo || !serie || !estatus) {
+
+return res.status(400).json({ error: 'Los campos modelo, tipo, serie y estatus son obligatorios.' });
+
+}
+
+
+
+const query = `
+
+INSERT INTO dispositivo (modelo, tipo, serie, marca, estatus)
+
+VALUES ($1, $2, $3, $4, $5)
+
+RETURNING dsp_id;
+
+`;
+
+
+
+try {
+
+const result = await pool.query(query, [modelo, tipo, serie, marca, estatus]);
+
+res.status(201).json({
+
+message: 'Dispositivo creado con éxito.',
+
+dsp_id: result.rows[0].dsp_id
+
+});
+
+} catch (error) {
+
+console.error('Error al crear el dispositivo:', error);
+
+res.status(500).json({ error: 'Error interno del servidor.' });
+
+}
+
+});// ===================================================================================// SERVICIO DE ESCUCHA MQTT: PROCESA MENSAJES DE TELEMETRÍA// Se ejecuta al iniciar la aplicación y se mantiene escuchando.// ===================================================================================const procesarMensajesMqtt = () => {
+
+console.log('Iniciando servicio de escucha MQTT...');
+
+const client = mqtt.connect(process.env.MQTT_BROKER_URL);
+
+
+
+// El '+' es un comodín (wildcard) que nos permite escuchar en múltiples sub-topics.
+
+const topicMaestro = 'dispositivos/+/telemetria';
+
+
+
+client.on('connect', () => {
+
+console.log('Conectado al broker MQTT.');
+
+client.subscribe(topicMaestro, (err) => {
+
+if (err) {
+
+console.error('Error al suscribirse al topic maestro:', err);
+
+} else {
+
+console.log(`Suscrito exitosamente al topic: ${topicMaestro}`);
+
+}
+
+});
+
+});
+
+
+
+// Este es el listener principal que se activa con cada mensaje que llega
+
+client.on('message', async (topic, message) => {
+
+console.log(`Mensaje recibido en el topic [${topic}]: ${message.toString()}`);
+
+
+
+let dbClient;
+
+try {
+
+// Parsear el mensaje, esperando un formato JSON específico
+
+const data = JSON.parse(message.toString());
+
+if (!data.parametros || typeof data.parametros !== 'object') {
+
+throw new Error('El formato del JSON es incorrecto. Debe tener una clave "parametros".');
+
+}
+
+
+
+dbClient = await pool.connect(); // Obtener un cliente del pool para la transacción
+
+
+
+// 1. Buscar el ID del registro (rgt_id) asociado a este topic
+
+const registroRes = await dbClient.query('SELECT rgt_id FROM registro WHERE topic = $1', [topic]);
+
+if (registroRes.rows.length === 0) {
+
+throw new Error(`No se encontró ningún registro para el topic: ${topic}`);
+
+}
+
+const rgt_id = registroRes.rows[0].rgt_id;
+
+
+
+// Iniciar una transacción para asegurar la integridad de los datos
+
+await dbClient.query('BEGIN');
+
+
+
+// 2. Insertar la cabecera en la tabla 'mensajes'
+
+const insertMensajeQuery = 'INSERT INTO mensajes (rgt_id, status) VALUES ($1, $2) RETURNING msg_id';
+
+const mensajeRes = await dbClient.query(insertMensajeQuery, [rgt_id, 1]); // Status 1 = Procesado
+
+const msg_id = mensajeRes.rows[0].msg_id;
+
+
+
+// 3. Insertar cada parámetro del mensaje en 'parametros_mensajes'
+
+const parametrosRecibidos = data.parametros;
+
+for (const nombreParametro in parametrosRecibidos) {
+
+const valorParametro = parametrosRecibidos[nombreParametro];
+
+
+
+// Buscar el ID del parámetro por su nombre (ej: "temperatura")
+
+const paramRes = await dbClient.query('SELECT prt_id FROM parametros WHERE nombre = $1', [nombreParametro]);
+
+if (paramRes.rows.length > 0) {
+
+const prt_id = paramRes.rows[0].prt_id;
+
+const insertParametroQuery = 'INSERT INTO parametros_mensajes (msg_id, prt_id, valor) VALUES ($1, $2, $3)';
+
+await dbClient.query(insertParametroQuery, [msg_id, prt_id, valorParametro]);
+
+} else {
+
+console.warn(`Parámetro desconocido "${nombreParametro}" recibido. Se ignorará.`);
+
+}
+
+}
+
+
+
+// Si todas las inserciones fueron exitosas, confirma la transacción
+
+await dbClient.query('COMMIT');
+
+console.log(`Mensaje del topic [${topic}] procesado y guardado con éxito (MSG_ID: ${msg_id}).`);
+
+
+
+} catch (error) {
+
+// Si algo falla, revierte todos los cambios de la transacción
+
+if (dbClient) {
+
+await dbClient.query('ROLLBACK');
+
+}
+
+console.error(`Error procesando mensaje del topic [${topic}]:`, error.message);
+
+} finally {
+
+// Libera el cliente para que otros puedan usarlo
+
+if (dbClient) {
+
+dbClient.release();
+
+}
+
+}
+
+});
+
+
+
+client.on('error', (error) => {
+
+console.error('Error en la conexión MQTT:', error);
+
+});
+
+};// Iniciar el listener de MQTT una sola vez cuando arranca la aplicación
+
+procesarMensajesMqtt();// ===================================================================================// INICIAR EL SERVIDOR EXPRESS// ===================================================================================const PORT = 3000;
+
+app.listen(PORT, () => {
+
+console.log(`Servidor API escuchando en http://localhost:${PORT}`);
+
+});
+
+Paso 5: Ejecución y Pruebas 🚀
+
+Tu código está listo, pero la base de datos está vacía. Necesitamos insertar algunos datos de prueba para que todo funcione.
+
+Insertar Datos de Prueba:
+
+Abre psql de nuevo, conéctate a la base de datos dispositivos_db (\c dispositivos_db).
+
+Copia y pega el siguiente bloque SQL para crear un usuario, un dispositivo y vincularlos para que puedan comunicarse vía MQTT.
+
+SQL
+
+
+
+-- 1. Crear un usuario de pruebaINSERT INTO usuario (nombre, correo, clave) VALUES ('Usuario de Prueba', 'test@test.com', '12345');-- 2. Crear un dispositivo de pruebaINSERT INTO dispositivo (modelo, tipo, serie, marca, estatus) VALUES ('ESP32-TEMP', 'Sensor', 'SN-001A', 'Espressif', 'A');-- 3. Crear los parámetros que este tipo de dispositivo puede medirINSERT INTO parametros (nombre, tipo, unidad) VALUES ('temperatura', 'Decimal', 'C');INSERT INTO parametros (nombre, tipo, unidad) VALUES ('humedad', 'Porcentaje', '%');-- 4. Crear el REGISTRO que une todo y define el topic MQTT para este dispositivo-- ASOCIA: Usuario con ID 1, con Dispositivo con ID 1, y le asigna un Topic específico.INSERT INTO registro (usr_id, dsp_id, topic) VALUES (1, 1, 'dispositivos/SN-001A/telemetria');
+
+Iniciar el Servidor:
+
+Vuelve a la terminal de VS Code y ejecuta:
+
+Bash
+
+
+
+node index.js
+
+Verás mensajes indicando que el servidor API y el listener MQTT están activos.
+
+Probar el Endpoint de API (/dispositivo):
+
+Usa una herramienta como Postman o la extensión Thunder Client en VS Code.
+
+Crea una nueva petición:
+
+Método: POST
+
+URL: http://localhost:3000/dispositivo
+
+Ve a la pestaña Body, selecciona JSON y pega lo siguiente:
+
+JSON
+
+
+
+{
+
+"modelo": "DHT22-SENSOR",
+
+"tipo": "Sensor",
+
+"serie": "SN-002B",
+
+"marca": "Aosong",
+
+"estatus": "A"
+
+}
+
+Envía la petición. Recibirás una respuesta 201 Created confirmando que se creó.
+
+Probar el Listener MQTT:
+
+Abre en tu navegador el cliente web de HiveMQ.
+
+En la sección Publish:
+
+Topic: Escribe el topic exacto que definimos en los datos de prueba: dispositivos/SN-001A/telemetria
+
+Message: Pega el siguiente JSON, que es el formato que nuestro código espera:
+
+JSON
+
+
+
+{
+
+"parametros": {
+
+"temperatura": 24.5,
+
+"humedad": 58.2
+
+}
+
+}
+
+Haz clic en Publish.
+
+¡Revisa la terminal de VS Code! Verás un mensaje indicando que el mensaje fue recibido, procesado y guardado.
+
+Verificación Final en la Base de Datos:
+
+Vuelve a psql y ejecuta estas consultas para ver los datos guardados:
+
+SQL
+
+
+
+SELECT * FROM mensajes;SELECT * FROM parametros_mensajes;
+
+Verás una nueva fila en mensajes y dos nuevas filas en parametros_mensajes con los valores que enviaste.
+
+¡Felicidades! Has construido, desde cero, una aplicación robusta con una base de datos relacional profesional, un API para crear dispositivos y un servicio que escucha y almacena datos de telemetría en tiempo real.
+
+
+
+pero al ejecutarlo me sale lo siguiente en la pagina
+
+Cannot GET /
+
+
+
+y en la consola me sale
+
+PS C:\Users\danieaccs1\Desktop\api_dispositivos> node index.js
+
+[dotenv@17.2.3] injecting env (6) from .env -- tip: ✅ audit secrets and track compliance: https://dotenvx.com/ops
+
+Iniciando servicio de escucha MQTT...
+
+Servidor API escuchando en http://localhost:3000
+
+Conectado al broker MQTT.
+
+Suscrito exitosamente al topic: dispositivos/+/telemetria
+
+
+
+Ayudame a resolver esto
+
+¡Hola! No te preocupes, lo que estás viendo es completamente normal y esperado. De hecho, es una excelente señal de que tu servidor está funcionando correctamente.
+
+El error Cannot GET / no significa que tu aplicación esté rota. Significa que tu navegador intentó hacer una petición GET a la dirección raíz (/), pero en tu código no has definido qué hacer en ese caso.
+
+¿Por Qué Sucede Esto? 🤔
+Tu servidor Express es como un recepcionista que solo tiene instrucciones para una tarea muy específica.
+
+Tu Código: Le has dado una instrucción clara con esta línea:
+
+JavaScript
+app.post('/dispositivo', async (req, res) => { ... });
+Esto se traduce como: "Si alguien viene a la puerta /dispositivo y usa el método POST, ejecuta este código".
+
+Tu Acción: Al escribir http://localhost:3000 en la barra de direcciones de tu navegador y presionar Enter, el navegador siempre realiza una petición de tipo GET a la ruta raíz (/).
+
+El Resultado: El servidor recibe la petición y dice: "Me han pedido hacer algo con GET en la ruta /, pero no tengo ninguna instrucción para eso. Solo sé qué hacer con POST en /dispositivo". Por eso te devuelve el mensaje Cannot GET /.
+
+En resumen: Estás intentando acceder a tu API como si fuera una página web, pero tu API (por ahora) no tiene una "página de inicio". Solo tiene un endpoint funcional que responde a POST.
+
+La Solución Correcta: Sigue el Paso 5 de tu Guía ✅
+La guía que estás siguiendo ya te indica la forma correcta de probar tu aplicación. No se prueba escribiendo la dirección en el navegador, sino usando una herramienta diseñada para probar APIs.
+
+Sigue exactamente estos pasos de tu tutorial:
+
+Mantén tu servidor corriendo (no cierres la terminal donde ejecutaste node index.js).
+
+Usa una herramienta como Postman o Thunder Client (una extensión para VS Code).
+
+Crea una nueva petición con los siguientes datos:
+
+Método: POST (¡Esta es la clave! No GET).
+
+URL: http://localhost:3000/dispositivo
+
+Body (Cuerpo): Selecciona el tipo JSON y pega el siguiente contenido:
+
+JSON
+{
+    "modelo": "DHT22-SENSOR",
+    "tipo": "Sensor",
+    "serie": "SN-002B",
+    "marca": "Aosong",
+    "estatus": "A"
+}
+Envía la petición.
+
+Al hacer esto, verás en Postman (o la herramienta que uses) una respuesta exitosa con un código 201 Created, y en tu base de datos se habrá creado el nuevo dispositivo.
+
+Mejora Opcional (Para que no veas el error en el navegador) 💡
+Si quieres que al entrar a http://localhost:3000 en tu navegador se vea un mensaje de bienvenida en lugar del error, puedes añadir un manejador para la ruta raíz.
+
+Simplemente agrega este pequeño bloque de código en tu archivo index.js, justo antes de la línea const PORT = 3000;:
+
+JavaScript
+// ... tu código anterior
+
+// ===================================================================================
+// ENDPOINT DE BIENVENIDA PARA LA RUTA RAÍZ (OPCIONAL)
+// Esto es solo para que se vea algo bonito en el navegador.
+// ===================================================================================
+app.get('/', (req, res) => {
+  res.send('<h1>¡El servidor API y el listener MQTT están funcionando!</h1><p>Usa una herramienta como Postman para probar el endpoint POST /dispositivo.</p>');
+});
+
+
+// ===================================================================================
+// INICIAR EL SERVIDOR EXPRESS
+// ===================================================================================
+const PORT = 3000;
+app.listen(PORT, () => {
+// ... el resto de tu código
+Si guardas el archivo, detienes el servidor (con Ctrl + C en la terminal) y lo vuelves a iniciar con node index.js, ahora al visitar http://localhost:3000 en tu navegador verás el mensaje de bienvenida.
+
+¡Felicidades, tu código funciona perfectamente! Solo estabas tocando la puerta equivocada. 😉
+
+Me sale este error al momento de ejecutar en railway
+
+
+
+Error en la conexión MQTT: AggregateError [ECONNREFUSED]:
+
+at internalConnectMultiple (node:net:1134:18)
+
+at afterConnectMultiple (node:net:1715:7) {
+
+code: 'ECONNREFUSED',
+
+[errors]: [
+
+Error: connect ECONNREFUSED ::1:1883
+
+at createConnectionError (node:net:1678:14)
+
+at afterConnectMultiple (node:net:1708:16) {
+
+errno: -111,
+
+code: 'ECONNREFUSED',
+
+syscall: 'connect',
+
+address: '::1',
+
+port: 1883
+
+},
+
+Error: connect ECONNREFUSED 127.0.0.1:1883
+
+at createConnectionError (node:net:1678:14)
+
+at afterConnectMultiple (node:net:1708:16) {
+
+errno: -111,
+
+code: 'ECONNREFUSED',
+
+syscall: 'connect',
+
+address: '127.0.0.1',
+
+port: 1883
+
+}
+
+]
+
+}
+
+port: 1883
+
+Error en la conexión MQTT: AggregateError [ECONNREFUSED]:
+
+at internalConnectMultiple (node:net:1134:18)
+
+}
+
+at afterConnectMultiple (node:net:1715:7) {
+
+code: 'ECONNREFUSED',
+
+]
+
+[errors]: [
+
+}
+
+Error: connect ECONNREFUSED ::1:1883
+
+at createConnectionError (node:net:1678:14)
+
+at afterConnectMultiple (node:net:1708:16) {
+
+errno: -111,
+
+code: 'ECONNREFUSED',
+
+syscall: 'connect',
+
+address: '::1',
+
+port: 1883
+
+},
+
+Error: connect ECONNREFUSED 127.0.0.1:1883
+
+at createConnectionError (node:net:1678:14)
+
+at afterConnectMultiple (node:net:1708:16) {
+
+errno: -111,
+
+code: 'ECONNREFUSED',
+
+syscall: 'connect',
+
+address: '127.0.0.1',
+
+address: '::1',
+
+port: 1883
+
+},
+
+Error: connect ECONNREFUSED 127.0.0.1:1883
+
+at createConnectionError (node:net:1678:14)
+
+at afterConnectMultiple (node:net:1708:16) {
+
+errno: -111,
+
+code: 'ECONNREFUSED',
+
+syscall: 'connect',
+
+address: '127.0.0.1',
+
+port: 1883
+
+Error en la conexión MQTT: AggregateError [ECONNREFUSED]:
+
+}
+
+at internalConnectMultiple (node:net:1134:18)
+
+]
+
+}
+
+at afterConnectMultiple (node:net:1715:7) {
+
+code: 'ECONNREFUSED',
+
+[errors]: [
+
+Error: connect ECONNREFUSED ::1:1883
+
+at createConnectionError (node:net:1678:14)
+
+at afterConnectMultiple (node:net:1708:16) {
+
+errno: -111,
+
+code: 'ECONNREFUSED',
+
+syscall: 'connect',
+
+Error en la conexión MQTT: AggregateError [ECONNREFUSED]:
+
+at internalConnectMultiple (node:net:1134:18)
+
+at afterConnectMultiple (node:net:1715:7) {
+
+code: 'ECONNREFUSED',
+
+[errors]: [
+
+Error: connect ECONNREFUSED ::1:1883
+
+at createConnectionError (node:net:1678:14)
+
+at afterConnectMultiple (node:net:1708:16) {
+
+errno: -111,
+
+code: 'ECONNREFUSED',
+
+syscall: 'connect',
+
+address: '::1',
+
+port: 1883
+
+},
+
+Error: connect ECONNREFUSED 127.0.0.1:1883
+
+at createConnectionError (node:net:1678:14)
+
+at afterConnectMultiple (node:net:1708:16) {
+
+errno: -111,
+
+code: 'ECONNREFUSED',
+
+syscall: 'connect',
+
+address: '127.0.0.1',
+
+port: 1883
+
+}
+
+]
+
+}
+
+}
+
+]
+
+Error en la conexión MQTT: AggregateError [ECONNREFUSED]:
+
+}
+
+at internalConnectMultiple (node:net:1134:18)
+
+at afterConnectMultiple (node:net:1715:7) {
+
+code: 'ECONNREFUSED',
+
+[errors]: [
+
+Error: connect ECONNREFUSED ::1:1883
+
+at createConnectionError (node:net:1678:14)
+
+at afterConnectMultiple (node:net:1708:16) {
+
+errno: -111,
+
+code: 'ECONNREFUSED',
+
+syscall: 'connect',
+
+address: '::1',
+
+port: 1883
+
+},
+
+Error: connect ECONNREFUSED 127.0.0.1:1883
+
+at createConnectionError (node:net:1678:14)
+
+at afterConnectMultiple (node:net:1708:16) {
+
+errno: -111,
+
+code: 'ECONNREFUSED',
+
+syscall: 'connect',
+
+address: '127.0.0.1',
+
+port: 1883
+
+Este error es claro y tiene una solución directa.
+
+El problema es que tu aplicación en Railway está intentando conectarse a un broker MQTT en localhost:1883 (las direcciones 127.0.0.1 y ::1 ambas significan localhost).
+
+El código ECONNREFUSED significa "Conexión Rechazada". Esto pasa porque, dentro del contenedor de Railway, localhost se refiere al contenedor mismo, y no hay ningún broker MQTT corriendo allí.
+
+¿Por qué pasa esto?
+Esto sucede porque tu variable de entorno MQTT_BROKER_URL no está configurada correctamente en tu proyecto de Railway.
+
+Cuando tu código javascript ejecuta mqtt.connect(process.env.MQTT_BROKER_URL) y no encuentra esa variable, la librería mqtt intenta conectarse a la dirección por defecto: mqtt://localhost:1883.
+
+El broker que quieres usar (según tu guía) es mqtt://broker.hivemq.com, que es un servicio público en internet, no localhost.
+
+La Solución: Añadir la Variable de Entorno en Railway
+Debes configurar las variables de entorno en el panel de tu proyecto de Railway para que coincidan con tu archivo .env.
+
+Ve a tu proyecto en Railway.app.
+
+Selecciona el servicio donde tienes desplegado tu index.js.
+
+Ve a la pestaña "Variables".
+
+Añade una nueva variable:
+
+Nombre: MQTT_BROKER_URL
+
+Valor: mqtt://broker.hivemq.com
+
+¡Importante! Revisa tus Otras Variables
+Ya que estás ahí, asegúrate de haber añadido también todas las variables de tu base de datos PostgreSQL (que Railway te provee) en esa misma pestaña de "Variables":
+
+DB_USER (Debería ser postgres)
+
+DB_HOST (El que te da Railway, ej: services.railway.app)
+
+DB_DATABASE (Debería ser railway)
+
+DB_PASSWORD (La que te da Railway)
+
+DB_PORT (El que te da Railway)
+
+Una vez que guardes la variable MQTT_BROKER_URL, Railway detectará el cambio y desplegará tu aplicación automáticamente. Al reiniciarse, los logs deberían mostrar:
+
+Iniciando servicio de escucha MQTT...
+Servidor API escuchando en http://localhost:3000
+Conectado al broker MQTT.
+Suscrito exitosamente al topic: dispositivos/+/telemetria

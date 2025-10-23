@@ -11,9 +11,9 @@ const app = express();
 app.use(express.json()); // Middleware para que Express entienda peticiones JSON
 
 // Configurar la conexión a la base de datos usando la URL COMPLETA de Railway
-// Esta conexión usa la variable DATABASE_URL, inyectada por Railway.
+// Este método es el más robusto para entornos de nube como Railway.
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL, // Usamos la URL de conexión completa
+  connectionString: process.env.DATABASE_URL, // Usamos la variable de conexión completa
   ssl: {
     rejectUnauthorized: false // Necesario para conexiones SSL de Railway
   }
@@ -45,6 +45,7 @@ app.post('/dispositivo', async (req, res) => {
     });
   } catch (error) {
     console.error('Error al crear el dispositivo:', error);
+    // Este 500 ahora debería ser un error de SQL, no un error de conexión (si las variables están bien)
     res.status(500).json({ error: 'Error interno del servidor.' });
   }
 });
@@ -221,13 +222,15 @@ const procesarMensajesMqtt = () => {
   });
 };
 
-// Iniciar el listener de MQTT una sola vez cuando arranca la aplicación
-procesarMensajesMqtt();
-
 // ===================================================================================
 // INICIAR EL SERVIDOR EXPRESS
+// El listener de MQTT se inicia DENTRO de app.listen para asegurar que Express
+// esté listo para recibir peticiones antes de que se inicien los procesos en segundo plano.
 // ===================================================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor Express ejecutándose en el puerto ${PORT}`);
+  
+  // 🟢 CORRECCIÓN: Llamamos a MQTT aquí para evitar el error 502
+  procesarMensajesMqtt();
 });

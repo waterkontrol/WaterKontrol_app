@@ -233,10 +233,11 @@ const procesarMensajesMqtt = () => {
 // ===================================================================================
 // INICIAR EL SERVIDOR EXPRESS
 // ===================================================================================
-const PORT = process.env.PORT || 3000;
+// <-- CORRECCIÓN #3: Ajustamos el puerto de fallback a 8080 para mayor compatibilidad con Railway
+const PORT = process.env.PORT || 8080; 
 app.listen(PORT, () => {
   console.log(`Servidor Express ejecutándose en el puerto ${PORT}`);
   
-  // <-- CORRECCIÓN #2: Iniciar MQTT SÓLO DESPUÉS de que el servidor Express esté escuchando
+  // Iniciar MQTT SÓLO DESPUÉS de que el servidor Express esté escuchando
   procesarMensajesMqtt();
 });

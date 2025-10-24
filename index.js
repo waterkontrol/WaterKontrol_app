@@ -1,5 +1,9 @@
-// Cargar las variables de entorno desde el archivo .env
-require('dotenv').config();
+// ===== ⬇️ INICIO DE LA CORRECCIÓN ⬇️ =====
+// Cargar las variables de entorno SÓLO si NO estamos en producción
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
+// ===== ⬆️ FIN DE LA CORRECCIÓN ⬆️ =====
 
 // Importar las librerías necesarias
 const express = require('express');
@@ -12,7 +16,7 @@ app.use(express.json()); // Middleware para que Express entienda peticiones JSON
 
 // Configuración CRÍTICA: Usamos la URL completa y SSL requerido por Railway
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_URL, 
   ssl: {
     rejectUnauthorized: false // Necesario para conexiones SSL de Railway
   }
@@ -233,20 +237,13 @@ const procesarMensajesMqtt = () => {
 // ===================================================================================
 // INICIAR EL SERVIDOR EXPRESS
 // ===================================================================================
-// Usamos 8080 como puerto de fallback (alternativo) por si Railway no inyecta el PORT a tiempo.
+// Railway ahora leerá el process.env.PORT correctamente.
 const PORT = process.env.PORT || 8080; 
-
-// ===== ⬇️ INICIO DE LA CORRECCIÓN ⬇️ =====
-
-// Define el HOST en '0.0.0.0' para aceptar conexiones desde CUALQUIER IP,
-// no solo 'localhost'. Esto es esencial para que el proxy de Railway se conecte.
 const HOST = '0.0.0.0';
 
 app.listen(PORT, HOST, () => {
-  // Modificamos el log para confirmar que está escuchando en el host correcto
   console.log(`Servidor Express ejecutándose en http://${HOST}:${PORT}`);
   
   // Iniciar MQTT SÓLO DESPUÉS de que el servidor Express esté escuchando
   procesarMensajesMqtt();
 });
-// ===== ⬆️ FIN DE LA CORRECCIÓN ⬆️ =====

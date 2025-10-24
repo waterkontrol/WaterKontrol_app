@@ -233,11 +233,20 @@ const procesarMensajesMqtt = () => {
 // ===================================================================================
 // INICIAR EL SERVIDOR EXPRESS
 // ===================================================================================
-// <-- CORRECCIÓN #3: Ajustamos el puerto de fallback a 8080 para mayor compatibilidad con Railway
+// Usamos 8080 como puerto de fallback (alternativo) por si Railway no inyecta el PORT a tiempo.
 const PORT = process.env.PORT || 8080; 
-app.listen(PORT, () => {
-  console.log(`Servidor Express ejecutándose en el puerto ${PORT}`);
+
+// ===== ⬇️ INICIO DE LA CORRECCIÓN ⬇️ =====
+
+// Define el HOST en '0.0.0.0' para aceptar conexiones desde cualquier IP,
+// no solo 'localhost'. Esto es esencial para que el proxy de Railway se conecte.
+const HOST = '0.0.0.0';
+
+app.listen(PORT, HOST, () => {
+  // Modificamos el log para confirmar que está escuchando en el host correcto
+  console.log(`Servidor Express ejecutándose en http://${HOST}:${PORT}`);
   
   // Iniciar MQTT SÓLO DESPUÉS de que el servidor Express esté escuchando
   procesarMensajesMqtt();
 });
+// ===== ⬆️ FIN DE LA CORRECCIÓN ⬆️ =====

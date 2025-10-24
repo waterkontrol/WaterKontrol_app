@@ -12,7 +12,7 @@ app.use(express.json()); // Middleware para que Express entienda peticiones JSON
 
 // Configuración CRÍTICA: Usamos la URL completa y SSL requerido por Railway
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL, // <-- CORRECCIÓN #1: Usamos la URL de conexión completa
+  connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false // Necesario para conexiones SSL de Railway
   }
@@ -238,7 +238,7 @@ const PORT = process.env.PORT || 8080;
 
 // ===== ⬇️ INICIO DE LA CORRECCIÓN ⬇️ =====
 
-// Define el HOST en '0.0.0.0' para aceptar conexiones desde cualquier IP,
+// Define el HOST en '0.0.0.0' para aceptar conexiones desde CUALQUIER IP,
 // no solo 'localhost'. Esto es esencial para que el proxy de Railway se conecte.
 const HOST = '0.0.0.0';
 

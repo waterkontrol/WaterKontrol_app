@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaterKontrol - Iniciar Sesión</title>
+    <link rel="stylesheet" href="style.css"> 
+</head>
+<body>
+    <div class="auth-container">
+        <h2>Iniciar Sesión</h2>
+        <form action="/auth/login" method="POST">
+            <label for="correo">Correo:</label>
+            <input type="email" id="correo" name="correo" required>
+
+            <label for="clave">Contraseña:</label>
+            <input type="password" id="clave" name="clave" required>
+
+            <button type="submit">Iniciar Sesión</button>
+        </form>
+        <div class="links">
+            <a href="/register.html">Crear Cuenta</a> |
+            <a href="/forgot.html">Olvidé Contraseña</a>
+        </div>
+    </div>
+</body>
+</html>

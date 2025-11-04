@@ -9,19 +9,20 @@ const path = require('path');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer'); 
+const cookieParser = require('cookie-parser'); // ¡NUEVO! Para manejar las cookies de sesión
 const saltRounds = 10; 
 
 // --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true })); 
+app.use(cookieParser()); // ¡NUEVO! Middleware para procesar cookies
 
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
 // ===================================================================================
 console.log('🔧 Intentando conectar a la base de datos...');
-// Detecta si es un entorno de producción (Railway)
-const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT; 
+const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
 console.log('📋 DATABASE_URL:', process.env.DATABASE_URL ? '✅ Definida' : '❌ NO DEFINIDA');
 console.log(`📋 Entorno: ${isProduction ? 'Producción (SSL ON)' : 'Local (SSL OFF)'}`);
 
@@ -44,7 +45,7 @@ const testDatabaseConnection = async () => {
     console.log('✅ Conexión a la base de datos establecida correctamente');
     
     // Verificar las columnas críticas para la autenticación
-    await client.query('SELECT correo, clave, token_verificacion, estatus FROM usuario LIMIT 1');
+    await client.query('SELECT usr_id, nombre, correo, clave, token_verificacion, estatus FROM usuario LIMIT 1');
     console.log(`✅ Tabla "usuario" verificada. Usando campos: correo, clave, token_verificacion, estatus.`);
 
     return true;
@@ -59,22 +60,21 @@ const testDatabaseConnection = async () => {
 };
 
 // ===================================================================================
-// CONFIGURACIÓN DE NODEMAILER (CRÍTICO: CAMBIO A PUERTO 465 SSL/TLS)
-// Este es el método más robusto para entornos Cloud como Railway
+// CONFIGURACIÓN DE NODEMAILER Y FUNCIONES DE CORREO (CORRECCIÓN CRÍTICA APLICADA)
 // ===================================================================================
+// CRÍTICO: Usamos el puerto 465 con secure: true para forzar SSL/TLS y evitar Connection Timeout.
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,             // CRÍTICO: Usamos puerto 465
-    secure: true,          // CRÍTICO: secure: true para el puerto 465 (SSL/TLS nativo)
+    host: 'smtp.gmail.com', // Servidor de Gmail
+    port: 465,              // CRÍTICO: Puerto 465 para SSL nativo
+    secure: true,           // secure: true para el puerto 465
     auth: {
         user: process.env.EMAIL_USER, 
         pass: process.env.EMAIL_PASS
     },
     tls: {
-        // Mantenemos rejectUnauthorized para compatibilidad con entornos restrictivos
         rejectUnauthorized: false
     },
-    // CRÍTICO: Reducimos el timeout para evitar que la petición POST se cuelgue 2 minutos
+    // Reducimos el timeout para que el servidor no se cuelgue 2 minutos
     timeout: 10000, 
     connectionTimeout: 10000 
 });
@@ -104,8 +104,9 @@ const sendVerificationEmail = async (userCorreo, verificationToken) => {
         console.log(`✉️ Correo de verificación enviado a ${userCorreo}`);
         return true;
     } catch (error) {
-        // El timeout de 10s se reflejará aquí, pero la respuesta 201 ya se dio.
+        // Aunque responde 201, el log debe indicar que falló el correo.
         console.error(`❌ Falló el envío del correo a ${userCorreo}: ${error.message}`);
+        // Retornamos false, pero dejamos que la ruta de registro continúe respondiendo 201
         return false;
     }
 };
@@ -134,18 +135,47 @@ const sendWelcomeEmail = async (userCorreo, userName) => {
 
 
 // ===================================================================================
-// RUTAS DE AUTENTICACIÓN (LOGIN, REGISTER, VERIFY) Y ARCHIVOS ESTÁTICOS
+// MIDDLEWARE DE AUTENTICACIÓN Y RUTAS DE LA APLICACIÓN
 // ===================================================================================
+
+// Middleware para verificar la sesión
+const requireAuth = (req, res, next) => {
+    // El ID de usuario está en la cookie "usr_id"
+    const usr_id = req.cookies.usr_id;
+    if (!usr_id) {
+        // Si no hay cookie, redirigir al login
+        return res.status(401).sendFile(path.join(__dirname, 'public', 'login.html'));
+    }
+    // Adjuntar el usr_id a la petición para que las rutas lo usen
+    req.usr_id = usr_id; 
+    next();
+};
 
 // Middleware para servir archivos estáticos (HTML, CSS) desde la carpeta 'public'
 app.use(express.static(path.join(__dirname, 'public'))); 
 
-// Ruta raíz: Sirve la página de login
+// Ruta raíz: Sirve la página de login (si no hay cookie)
 app.get('/', (req, res) => {
+    // Si ya existe la cookie de sesión, redirigir directamente a la aplicación
+    if (req.cookies.usr_id) {
+        return res.redirect('/app.html');
+    }
     res.sendFile(path.join(__dirname, 'public', 'login.html')); 
 });
 
-// Endpoint POST para LOGIN
+// NUEVA RUTA: Pantalla principal de la aplicación, protegida por autenticación
+app.get('/app.html', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'app.html'));
+});
+
+// Endpoint POST para LOGOUT (opcional pero recomendado)
+app.post('/auth/logout', (req, res) => {
+    res.clearCookie('usr_id'); // Eliminar la cookie de sesión
+    res.status(200).json({ message: 'Sesión cerrada.', redirect: '/' });
+});
+
+
+// Endpoint POST para LOGIN (MODIFICADO para establecer cookie)
 app.post('/auth/login', async (req, res) => {
     const { correo, clave } = req.body; 
 
@@ -170,7 +200,20 @@ app.post('/auth/login', async (req, res) => {
 
         if (match) {
             console.log(`🔑 Login Exitoso: Usuario ${correo}`);
-            res.status(200).send(`¡Login Exitoso! Bienvenido, ${user.nombre}. Redirigiendo...`);
+            
+            // CRÍTICO: Establecer la cookie de sesión con el usr_id
+            res.cookie('usr_id', user.usr_id, { 
+                httpOnly: true, // No accesible vía JavaScript (más seguro)
+                secure: isProduction, // Solo se envía sobre HTTPS en producción
+                maxAge: 86400000 // 24 horas de sesión
+            });
+
+            // Responder con éxito y la redirección para el frontend
+            res.status(200).json({ 
+                message: `¡Login Exitoso! Bienvenido, ${user.nombre}. Redirigiendo...`,
+                redirect: '/app.html' 
+            });
+
         } else {
             return res.status(401).send('Credenciales inválidas. (Clave incorrecta)');
         }
@@ -181,8 +224,9 @@ app.post('/auth/login', async (req, res) => {
     }
 });
 
-// Endpoint POST para REGISTRO
+// Endpoint POST para REGISTRO (SIN CAMBIOS, solo logica de correo)
 app.post('/auth/register', async (req, res) => {
+    // ... (El código de registro sigue aquí sin cambios, solo usa el nuevo transporter)
     const { nombre, correo, clave } = req.body; 
 
     if (!nombre || !correo || !clave) {
@@ -195,7 +239,6 @@ app.post('/auth/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(clave, saltRounds);
         const verificationToken = crypto.randomBytes(32).toString('hex'); 
 
-        // 1. Inserción en la Base de Datos
         const registerQuery = `
             INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) 
             VALUES ($1, $2, $3, $4, 0) 
@@ -203,18 +246,15 @@ app.post('/auth/register', async (req, res) => {
         `;
         await client.query(registerQuery, [nombre, correo, hashedPassword, verificationToken]);
 
-        // 2. Envío del Correo (Manejará el timeout de 10s o la conexión exitosa)
         await sendVerificationEmail(correo, verificationToken); 
         
         console.log(`📝 Registro Exitoso: Nuevo usuario ${correo}. Esperando verificación.`);
-        // CRÍTICO: Responder inmediatamente con éxito (201) ya que el usuario SÍ está en DB
         res.status(201).send(`Registro Exitoso. Se ha enviado un correo de verificación a ${correo}. Por favor, revisa tu bandeja de entrada. (Puede tardar si hay problemas con el servidor de correo)`);
 
     } catch (error) {
         if (error.code === '23505') { 
             return res.status(409).send('El correo ya está registrado. Por favor, inicia sesión.');
         }
-        // Este catch solo debe atrapar errores de DB o de hashing.
         console.error('❌ Error en el proceso de registro (general):', error.message);
         res.status(500).send('Error interno del servidor durante el registro.');
     } finally {
@@ -224,7 +264,8 @@ app.post('/auth/register', async (req, res) => {
     }
 });
 
-// ENDPOINT DE VERIFICACIÓN: /auth/verify 
+
+// ENDPOINT DE VERIFICACIÓN: /auth/verify (SIN CAMBIOS)
 app.get('/auth/verify', async (req, res) => {
     const token = req.query.token;
 
@@ -241,7 +282,6 @@ app.get('/auth/verify', async (req, res) => {
         const user = result.rows[0];
 
         if (!user) {
-            // Este es el caso cuando el token ya fue usado (estatus != 0) o es incorrecto
             return res.status(404).send('Enlace de verificación inválido o expirado. La cuenta ya puede estar activa. Por favor, intenta iniciar sesión.');
         }
 
@@ -286,6 +326,7 @@ app.get('/auth/verify', async (req, res) => {
     }
 });
 
+
 // Endpoint POST para OLVIDÉ CONTRASEÑA (Simulación)
 app.post('/auth/forgot', (req, res) => {
     const correo = req.body.correo;
@@ -296,9 +337,35 @@ app.post('/auth/forgot', (req, res) => {
     res.status(200).send('Si la cuenta está registrada, recibirás un correo electrónico con instrucciones para restablecer tu contraseña.');
 });
 
+// NUEVO ENDPOINT: Obtener dispositivos del usuario logueado (PROTEGIDO)
+app.get('/api/devices', requireAuth, async (req, res) => {
+    // req.usr_id es inyectado por el middleware requireAuth
+    const usr_id = req.usr_id; 
+    try {
+        // Consulta para obtener el dispositivo y su topic, unidos por la tabla registro
+        const query = `
+            SELECT 
+                d.dsp_id, d.modelo, d.tipo, d.serie, d.marca, d.estatus, r.topic
+            FROM 
+                dispositivo d
+            JOIN 
+                registro r ON d.dsp_id = r.dsp_id
+            WHERE 
+                r.usr_id = $1
+            ORDER BY
+                d.dsp_id DESC;
+        `;
+        const result = await pool.query(query, [usr_id]);
+        res.status(200).json(result.rows);
+    } catch (error) {
+        console.error('❌ Error al obtener dispositivos del usuario:', error.message);
+        res.status(500).json({ error: 'Error interno del servidor al obtener dispositivos.' });
+    }
+});
+
 
 // ===================================================================================
-// ENDPOINTS DE API Y MQTT EXISTENTES
+// ENDPOINTS DE API Y MQTT EXISTENTES (SIN CAMBIOS)
 // ===================================================================================
 
 app.get('/health', (req, res) => {
@@ -366,6 +433,7 @@ app.post('/dispositivo/parametros', async (req, res) => {
 });
 
 app.post('/registro', async (req, res) => {
+    // NOTA: Esta ruta crea la vinculación de un dispositivo a un usuario (usr_id)
     const { usr_id, dsp_id, topic } = req.body;
     if (!usr_id || !dsp_id || !topic) {
       return res.status(400).json({ error: 'Los campos usr_id, dsp_id y topic son obligatorios.' });

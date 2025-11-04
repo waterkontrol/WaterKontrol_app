@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>WaterKontrol - Mis Dispositivos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f9;
+            color: #333;
+        }
+        .header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+        .device-list-container {
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .device-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 5px solid #007bff;
+        }
+        .device-info h2 {
+            margin: 0 0 5px 0;
+            font-size: 1.2em;
+            color: #007bff;
+        }
+        .device-info p {
+            margin: 2px 0;
+            font-size: 0.9em;
+        }
+        .device-status {
+            font-weight: bold;
+            color: green;
+        }
+        /* Botón Flotante Grande */
+        .add-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: #28a745; /* Verde para agregar */
+            color: white;
+            font-size: 30px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            line-height: 60px;
+            text-align: center;
+            text-decoration: none;
+            transition: background-color 0.2s;
+        }
+        .add-button:hover {
+            background-color: #218838;
+        }
+        .logout-button {
+            background: none;
+            border: 1px solid white;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>WaterKontrol - Mis Dispositivos</h1>
+        <button class="logout-button" id="logoutButton">Cerrar Sesión</button>
+    </div>
+
+    <div class="device-list-container">
+        <h2>Mis Dispositivos Agregados</h2>
+        <p id="loading-message">Cargando dispositivos...</p>
+        <div id="deviceList">
+            </div>
+    </div>
+
+    <a href="/add_device.html" class="add-button" title="Agregar Dispositivo">+</a>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', fetchDevices);
+
+        async function fetchDevices() {
+            const deviceList = document.getElementById('deviceList');
+            const loadingMessage = document.getElementById('loading-message');
+            deviceList.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/devices');
+                
+                if (response.status === 401) {
+                    // Si el servidor responde 401 (No autorizado), redirigir al login
+                    window.location.href = '/'; 
+                    return;
+                }
+
+                const devices = await response.json();
+                
+                loadingMessage.style.display = 'none';
+
+                if (devices.length === 0) {
+                    deviceList.innerHTML = '<p>Aún no tienes dispositivos agregados. Haz clic en el botón (+) para empezar.</p>';
+                    return;
+                }
+
+                devices.forEach(device => {
+                    const card = document.createElement('div');
+                    card.className = 'device-card';
+                    
+                    const statusText = device.estatus === 1 ? 'Activo' : 'Inactivo';
+                    const statusColor = device.estatus === 1 ? 'green' : 'red';
+
+                    card.innerHTML = `
+                        <div class="device-info">
+                            <h2>${device.modelo} (${device.serie})</h2>
+                            <p><strong>Tipo:</strong> ${device.tipo} | <strong>Marca:</strong> ${device.marca || 'N/A'}</p>
+                            <p><strong>Topic MQTT:</strong> ${device.topic}</p>
+                        </div>
+                        <div class="device-status" style="color: ${statusColor};">
+                            ${statusText}
+                        </div>
+                    `;
+                    deviceList.appendChild(card);
+                });
+
+            } catch (error) {
+                console.error('Error al cargar dispositivos:', error);
+                loadingMessage.textContent = '❌ Error al cargar los dispositivos. Intente recargar la página.';
+                loadingMessage.style.color = 'red';
+            }
+        }
+
+        // Lógica para el botón de Cerrar Sesión
+        document.getElementById('logoutButton').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/auth/logout', {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    // El servidor ya borró la cookie, solo redirigimos
+                    window.location.href = '/'; 
+                } else {
+                    alert('Error al cerrar la sesión.');
+                }
+            } catch (error) {
+                console.error('Error de red al cerrar sesión:', error);
+            }
+        });
+    </script>
+</body>
+</html>

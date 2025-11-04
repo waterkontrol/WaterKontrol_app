@@ -5,17 +5,19 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const mqtt = require('mqtt');
-const path = require('path');
-const bcrypt = require('bcrypt'); // Necesario para cifrar y comparar contraseñas
-const saltRounds = 10; // Nivel de cifrado para bcrypt
+const path = require('path'); // CRÍTICO: Necesario para servir archivos estáticos y rutas
+const bcrypt = require('bcrypt'); // CRÍTICO: Necesario para hashing de contraseñas
+const crypto = require('crypto'); // CRÍTICO: Necesario para generar tokens
+const nodemailer = require('nodemailer'); // CRÍTICO: Necesario para el envío de correos
+const saltRounds = 10; 
 
 // --- CONFIGURACIÓN ---
 const app = express();
 app.use(express.json()); // Middleware para que Express entienda peticiones JSON
-app.use(express.urlencoded({ extended: true })); // Para manejar datos de formularios (Login/Register)
+app.use(express.urlencoded({ extended: true })); // CRÍTICO: Para que Express entienda datos de formularios
 
 // ===================================================================================
-// LÓGICA DE CONEXIÓN A LA BASE DE DATOS (CORRECCIÓN SSL LOCAL/RAILWAY)
+// LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
 // ===================================================================================
 console.log('🔧 Intentando conectar a la base de datos...');
 const isProduction = process.env.NODE_ENV === 'production';
@@ -39,14 +41,14 @@ const testDatabaseConnection = async () => {
     client = await pool.connect();
     console.log('✅ Conexión a la base de datos establecida correctamente');
     
-    // Verificación de la tabla usuario (solo verificamos columnas clave que sabemos existen)
-    await client.query('SELECT usr_id, nombre, correo, clave FROM usuario LIMIT 1');
-    console.log(`✅ Tabla "usuario" verificada. Usando campos: correo y clave.`);
+    // Ahora verificamos las columnas necesarias para la verificación (token_verificacion, estatus)
+    // Asume que la tabla 'usuario' existe.
+    await client.query('SELECT usr_id, nombre, correo, clave, token_verificacion, estatus FROM usuario LIMIT 1');
+    console.log(`✅ Tabla "usuario" verificada. Usando campos: correo, clave, token_verificacion, estatus.`);
 
     return true;
   } catch (error) {
-    console.error('❌ Error crítico conectando a la base de datos:', error.message);
-    console.error('🔍 Detalle: Asegúrate de que tu DB local esté corriendo y la tabla "usuario" exista con las columnas "nombre", "correo" y "clave".');
+    console.error('❌ Error crítico conectando a la base de datos o faltando columnas:', error.message);
     return false;
   } finally {
     if (client) {
@@ -55,17 +57,71 @@ const testDatabaseConnection = async () => {
   }
 };
 
+// ===================================================================================
+// CONFIGURACIÓN DE NODEMAILER Y FUNCIONES DE CORREO
+// ===================================================================================
+const transporter = nodemailer.createTransport({
+    service: 'gmail', 
+    auth: {
+        user: process.env.EMAIL_USER, 
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+/**
+ * Función para enviar el correo de verificación.
+ */
+const sendVerificationEmail = async (userCorreo, verificationToken) => {
+    // Usamos el APP_BASE_URL del .env (debe ser http://localhost:8080 o la URL de Railway)
+    const verificationUrl = `${process.env.APP_BASE_URL}/auth/verify?token=${verificationToken}`;
+
+    const mailOptions = {
+        from: `"WaterKontrol" <${process.env.EMAIL_USER}>`,
+        to: userCorreo,
+        subject: 'Verifica tu cuenta de WaterKontrol',
+        html: `
+            <h2>¡Gracias por registrarte!</h2>
+            <p>Por favor, haz clic en el siguiente enlace para verificar tu dirección de correo electrónico:</p>
+            <a href="${verificationUrl}" style="padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">Verificar Correo Electrónico</a>
+            <p>Si no te registraste, puedes ignorar este correo.</p>
+        `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✉️ Correo de verificación enviado a ${userCorreo}`);
+};
+
+/**
+ * Función para enviar el correo de bienvenida.
+ */
+const sendWelcomeEmail = async (userCorreo, userName) => {
+    const mailOptions = {
+        from: `"WaterKontrol" <${process.env.EMAIL_USER}>`,
+        to: userCorreo,
+        subject: '¡Bienvenido a WaterKontrol! Tu cuenta está activa',
+        html: `
+            <h2>¡Hola, ${userName}!</h2>
+            <p>Tu cuenta ha sido verificada y activada con éxito. Ya puedes iniciar sesión y comenzar a gestionar tus dispositivos.</p>
+            <p>Saludos cordiales,<br>El equipo de WaterKontrol.</p>
+        `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✉️ Correo de bienvenida enviado a ${userCorreo}`);
+};
+
 
 // ===================================================================================
-// RUTAS DE AUTENTICACIÓN (LOGIN, REGISTER, FORGOT)
+// RUTAS DE AUTENTICACIÓN (LOGIN, REGISTER, VERIFY) Y ARCHIVOS ESTÁTICOS
 // ===================================================================================
 
 // Middleware para servir archivos estáticos (HTML, CSS) desde la carpeta 'public'
-app.use(express.static(path.join(__dirname, 'public')));
+// NOTA: Asumo que tienes una carpeta 'public' con tu HTML/CSS/JS de frontend.
+app.use(express.static(path.join(__dirname, 'public'))); 
 
 // Ruta raíz: Sirve la página de login
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+    res.sendFile(path.join(__dirname, 'public', 'login.html')); 
 });
 
 // Endpoint POST para LOGIN
@@ -77,8 +133,7 @@ app.post('/auth/login', async (req, res) => {
     }
 
     try {
-        // CORRECCIÓN: Quitamos el filtro estatus = 1, ya que la columna podría no existir
-        const userQuery = 'SELECT usr_id, nombre, clave, correo FROM usuario WHERE correo = $1'; 
+        const userQuery = 'SELECT usr_id, nombre, clave, correo, estatus FROM usuario WHERE correo = $1'; 
         const result = await pool.query(userQuery, [correo]);
         const user = result.rows[0];
 
@@ -86,7 +141,10 @@ app.post('/auth/login', async (req, res) => {
             return res.status(401).send('Credenciales inválidas. (Usuario no encontrado)');
         }
 
-        // 1. COMPARACIÓN DE CONTRASEÑA (USANDO BCRYPT)
+        if (user.estatus === 0) {
+            return res.status(403).send('Tu cuenta aún no ha sido verificada. Revisa tu correo electrónico para el enlace de verificación.');
+        }
+
         const match = await bcrypt.compare(clave, user.clave);
 
         if (match) {
@@ -111,28 +169,89 @@ app.post('/auth/register', async (req, res) => {
     }
 
     try {
-        // 1. CIFRADO DE CONTRASEÑA (USANDO BCRYPT)
         const hashedPassword = await bcrypt.hash(clave, saltRounds);
+        const verificationToken = crypto.randomBytes(32).toString('hex'); 
 
-        // 2. INSERCIÓN EN LA BASE DE DATOS
-        // CORRECCIÓN CRÍTICA: Eliminamos 'rol_id' y 'estatus' de la inserción.
         const registerQuery = `
-            INSERT INTO usuario (nombre, correo, clave) 
-            VALUES ($1, $2, $3) 
+            INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) 
+            VALUES ($1, $2, $3, $4, 0) 
             RETURNING usr_id, nombre
         `;
-        const result = await pool.query(registerQuery, [nombre, correo, hashedPassword]);
+        const result = await pool.query(registerQuery, [nombre, correo, hashedPassword, verificationToken]);
 
-        console.log(`📝 Registro Exitoso: Nuevo usuario ${correo} (ID: ${result.rows[0].usr_id})`);
-        res.status(201).send(`Registro Exitoso. Bienvenido, ${result.rows[0].nombre}. Ahora puedes iniciar sesión.`);
+        await sendVerificationEmail(correo, verificationToken);
+        
+        console.log(`📝 Registro Exitoso: Nuevo usuario ${correo}. Esperando verificación.`);
+        res.status(201).send(`Registro Exitoso. Se ha enviado un correo de verificación a ${correo}. Por favor, revisa tu bandeja de entrada.`);
 
     } catch (error) {
-        if (error.code === '23505') { // Código de error de PostgreSQL para clave duplicada (UNIQUE)
+        if (error.code === '23505') { 
             return res.status(409).send('El correo ya está registrado. Por favor, inicia sesión.');
         }
         console.error('❌ Error en el proceso de registro:', error.message);
-        // Devolvemos el error detallado para ayudar en la depuración
-        res.status(500).send('Error interno del servidor durante el registro. (Detalle: ' + error.message + ')');
+        res.status(500).send('Error interno del servidor durante el registro.');
+    }
+});
+
+// ENDPOINT DE VERIFICACIÓN: /auth/verify (SOLUCIONA Cannot GET)
+app.get('/auth/verify', async (req, res) => {
+    const token = req.query.token;
+
+    if (!token) {
+        // En lugar de Cannot GET, envía un error 400
+        return res.status(400).send('Token de verificación faltante o inválido.');
+    }
+
+    try {
+        const userQuery = `
+            SELECT usr_id, nombre, correo FROM usuario 
+            WHERE token_verificacion = $1 AND estatus = 0
+        `;
+        const result = await pool.query(userQuery, [token]);
+        const user = result.rows[0];
+
+        if (!user) {
+            return res.status(404).send('Enlace de verificación inválido o expirado. La cuenta ya puede estar activa.');
+        }
+
+        const updateQuery = `
+            UPDATE usuario 
+            SET estatus = 1, token_verificacion = NULL 
+            WHERE usr_id = $1 
+            RETURNING nombre, correo
+        `;
+        await pool.query(updateQuery, [user.usr_id]);
+
+        await sendWelcomeEmail(user.correo, user.nombre);
+
+        console.log(`✅ Verificación Exitosa: Usuario ${user.correo} activado.`);
+        
+        // Respuesta HTML
+        res.status(200).send(`
+            <!DOCTYPE html>
+            <html lang="es">
+            <head>
+                <meta charset="UTF-8">
+                <title>Verificación Exitosa</title>
+                <style>
+                    body { font-family: sans-serif; text-align: center; padding: 50px; }
+                    .success { color: green; border: 1px solid green; padding: 20px; border-radius: 8px; max-width: 400px; margin: 0 auto; }
+                </style>
+            </head>
+            <body>
+                <div class="success">
+                    <h2>¡Verificación Exitosa!</h2>
+                    <p>Tu cuenta ha sido activada correctamente, ${user.nombre}.</p>
+                    <p>¡Te hemos enviado un correo de bienvenida!</p>
+                    <a href="${process.env.APP_BASE_URL}" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">Ir al Login</a>
+                </div>
+            </body>
+            </html>
+        `);
+
+    } catch (error) {
+        console.error('❌ Error durante la verificación:', error.message);
+        res.status(500).send('Error interno del servidor al verificar la cuenta.');
     }
 });
 
@@ -148,13 +267,13 @@ app.post('/auth/forgot', (req, res) => {
 
 
 // ===================================================================================
-// ENDPOINTS DE API EXISTENTES (MANTENIDOS)
+// ENDPOINTS DE API Y MQTT EXISTENTES (Mantenidos de tu código)
 // ===================================================================================
+
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// ENDPOINT DE API: REGISTRO DE UN NUEVO DISPOSITIVO
 app.post('/dispositivo', async (req, res) => {
   const { modelo, tipo, serie, marca, estatus } = req.body;
   if (!modelo || !tipo || !serie || !estatus) {
@@ -175,11 +294,10 @@ app.post('/dispositivo', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error al crear el dispositivo:', error.message);
-    res.status(500).json({ error: 'Error interno del servidor. (Detalle: ' + error.message + ')' });
+    res.status(500).json({ error: 'Error interno del servidor.' });
   }
 });
 
-// ENDPOINT DE API: ASOCIAR PARÁMETROS A UN DISPOSITOSITIVO EXISTENTE
 app.post('/dispositivo/parametros', async (req, res) => {
     const { dsp_id, prt_ids } = req.body;
     if (!dsp_id || !prt_ids || !Array.isArray(prt_ids) || prt_ids.length === 0) {
@@ -216,7 +334,6 @@ app.post('/dispositivo/parametros', async (req, res) => {
     }
 });
 
-// ENDPOINT DE API: REGISTRO DE VINCULACIÓN
 app.post('/registro', async (req, res) => {
     const { usr_id, dsp_id, topic } = req.body;
     if (!usr_id || !dsp_id || !topic) {
@@ -244,10 +361,6 @@ app.post('/registro', async (req, res) => {
     }
 });
 
-
-// ===================================================================================
-// SERVICIO DE ESCUCHA MQTT (MANTENIDO)
-// ===================================================================================
 const procesarMensajesMqtt = () => {
   console.log('Iniciando servicio de escucha MQTT...');
 
@@ -342,8 +455,11 @@ const startServer = async () => {
         console.error('❌ No se pudo conectar a la base de datos. Las funciones de autenticación y DB fallarán.');
     }
 
-    app.listen(PORT, () => {
-        console.log(`✅ Servidor Express ejecutándose en el puerto ${PORT}`);
+    // CRÍTICO: Asegurarse de escuchar en 0.0.0.0 si es Railway
+    const host = isProduction ? '0.0.0.0' : 'localhost';
+
+    app.listen(PORT, host, () => {
+        console.log(`✅ Servidor Express ejecutándose en ${host}:${PORT}`);
         
         if (dbConnected) {
              procesarMensajesMqtt();

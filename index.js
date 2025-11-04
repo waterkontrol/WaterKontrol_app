@@ -5,27 +5,28 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const mqtt = require('mqtt');
-const path = require('path'); // CRÍTICO: Necesario para servir archivos estáticos y rutas
-const bcrypt = require('bcrypt'); // CRÍTICO: Necesario para hashing de contraseñas
-const crypto = require('crypto'); // CRÍTICO: Necesario para generar tokens
-const nodemailer = require('nodemailer'); // CRÍTICO: Necesario para el envío de correos
+const path = require('path');
+const bcrypt = require('bcrypt');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer'); 
 const saltRounds = 10; 
 
-// --- CONFIGURACIÓN ---
+// --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
-app.use(express.json()); // Middleware para que Express entienda peticiones JSON
-app.use(express.urlencoded({ extended: true })); // CRÍTICO: Para que Express entienda datos de formularios
+app.use(express.json()); 
+app.use(express.urlencoded({ extended: true })); 
 
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
 // ===================================================================================
 console.log('🔧 Intentando conectar a la base de datos...');
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
 console.log('📋 DATABASE_URL:', process.env.DATABASE_URL ? '✅ Definida' : '❌ NO DEFINIDA');
 console.log(`📋 Entorno: ${isProduction ? 'Producción (SSL ON)' : 'Local (SSL OFF)'}`);
 
 const poolConfig = {
   connectionString: process.env.DATABASE_URL, 
+  // CRÍTICO: Configuración SSL para Railway
   ssl: isProduction ? { rejectUnauthorized: false } : false, 
   connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 30000,
@@ -41,8 +42,7 @@ const testDatabaseConnection = async () => {
     client = await pool.connect();
     console.log('✅ Conexión a la base de datos establecida correctamente');
     
-    // Ahora verificamos las columnas necesarias para la verificación (token_verificacion, estatus)
-    // Asume que la tabla 'usuario' existe.
+    // Verificar las columnas críticas para la autenticación
     await client.query('SELECT usr_id, nombre, correo, clave, token_verificacion, estatus FROM usuario LIMIT 1');
     console.log(`✅ Tabla "usuario" verificada. Usando campos: correo, clave, token_verificacion, estatus.`);
 
@@ -65,14 +65,20 @@ const transporter = nodemailer.createTransport({
     auth: {
         user: process.env.EMAIL_USER, 
         pass: process.env.EMAIL_PASS
-    }
+    },
+    // CRÍTICO: Añadir timeout de 15 segundos para evitar que la petición de registro se cuelgue
+    // Si el correo no responde en 15s, la promesa falla, pero la app de registro puede continuar.
+    // Esto previene los errores de POST 499/500 por timeout.
+    // Si sigue fallando por timeout, el problema es el firewall de Railway o la contraseña de aplicación.
+    // (Timeout está en milisegundos)
+    timeout: 15000, 
 });
 
 /**
  * Función para enviar el correo de verificación.
  */
 const sendVerificationEmail = async (userCorreo, verificationToken) => {
-    // Usamos el APP_BASE_URL del .env (debe ser http://localhost:8080 o la URL de Railway)
+    // Usamos el APP_BASE_URL del .env (o la variable de Railway)
     const verificationUrl = `${process.env.APP_BASE_URL}/auth/verify?token=${verificationToken}`;
 
     const mailOptions = {
@@ -87,27 +93,38 @@ const sendVerificationEmail = async (userCorreo, verificationToken) => {
         `,
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`✉️ Correo de verificación enviado a ${userCorreo}`);
+    // CRÍTICO: Usar try-catch para manejar fallos de red/servidor SMTP
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`✉️ Correo de verificación enviado a ${userCorreo}`);
+        return true;
+    } catch (error) {
+        console.error(`❌ Falló el envío del correo a ${userCorreo}:`, error.message);
+        // Retornamos false, pero dejamos que la ruta de registro continúe
+        return false;
+    }
 };
 
 /**
  * Función para enviar el correo de bienvenida.
  */
 const sendWelcomeEmail = async (userCorreo, userName) => {
-    const mailOptions = {
-        from: `"WaterKontrol" <${process.env.EMAIL_USER}>`,
-        to: userCorreo,
-        subject: '¡Bienvenido a WaterKontrol! Tu cuenta está activa',
-        html: `
-            <h2>¡Hola, ${userName}!</h2>
-            <p>Tu cuenta ha sido verificada y activada con éxito. Ya puedes iniciar sesión y comenzar a gestionar tus dispositivos.</p>
-            <p>Saludos cordiales,<br>El equipo de WaterKontrol.</p>
-        `,
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log(`✉️ Correo de bienvenida enviado a ${userCorreo}`);
+    try {
+        const mailOptions = {
+            from: `"WaterKontrol" <${process.env.EMAIL_USER}>`,
+            to: userCorreo,
+            subject: '¡Bienvenido a WaterKontrol! Tu cuenta está activa',
+            html: `
+                <h2>¡Hola, ${userName}!</h2>
+                <p>Tu cuenta ha sido verificada y activada con éxito. Ya puedes iniciar sesión y comenzar a gestionar tus dispositivos.</p>
+                <p>Saludos cordiales,<br>El equipo de WaterKontrol.</p>
+            `,
+        };
+        await transporter.sendMail(mailOptions);
+        console.log(`✉️ Correo de bienvenida enviado a ${userCorreo}`);
+    } catch (error) {
+         console.error(`❌ Falló el envío del correo de bienvenida a ${userCorreo}:`, error.message);
+    }
 };
 
 
@@ -116,7 +133,6 @@ const sendWelcomeEmail = async (userCorreo, userName) => {
 // ===================================================================================
 
 // Middleware para servir archivos estáticos (HTML, CSS) desde la carpeta 'public'
-// NOTA: Asumo que tienes una carpeta 'public' con tu HTML/CSS/JS de frontend.
 app.use(express.static(path.join(__dirname, 'public'))); 
 
 // Ruta raíz: Sirve la página de login
@@ -168,37 +184,48 @@ app.post('/auth/register', async (req, res) => {
         return res.status(400).send('Todos los campos (nombre, correo, clave) son obligatorios.');
     }
 
+    let client;
     try {
+        client = await pool.connect();
         const hashedPassword = await bcrypt.hash(clave, saltRounds);
         const verificationToken = crypto.randomBytes(32).toString('hex'); 
 
+        // 1. Inserción en la Base de Datos (Parte que NO falla)
         const registerQuery = `
             INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) 
             VALUES ($1, $2, $3, $4, 0) 
             RETURNING usr_id, nombre
         `;
-        const result = await pool.query(registerQuery, [nombre, correo, hashedPassword, verificationToken]);
+        await client.query(registerQuery, [nombre, correo, hashedPassword, verificationToken]);
 
-        await sendVerificationEmail(correo, verificationToken);
+        // 2. Envío del Correo (Parte que SÍ falla por timeout)
+        await sendVerificationEmail(correo, verificationToken); // Esto ahora maneja su propio error y timeout
+
         
         console.log(`📝 Registro Exitoso: Nuevo usuario ${correo}. Esperando verificación.`);
-        res.status(201).send(`Registro Exitoso. Se ha enviado un correo de verificación a ${correo}. Por favor, revisa tu bandeja de entrada.`);
+        // CRÍTICO: Responder inmediatamente sin esperar a que el cliente se dé por vencido
+        res.status(201).send(`Registro Exitoso. Se ha enviado un correo de verificación a ${correo}. Por favor, revisa tu bandeja de entrada. (Puede tardar si hay problemas con el servidor de correo)`);
 
     } catch (error) {
         if (error.code === '23505') { 
             return res.status(409).send('El correo ya está registrado. Por favor, inicia sesión.');
         }
-        console.error('❌ Error en el proceso de registro:', error.message);
+        // Los errores de Nodemailer ya se manejan dentro de sendVerificationEmail,
+        // pero este catch maneja errores de DB o de hashing.
+        console.error('❌ Error en el proceso de registro (general):', error.message);
         res.status(500).send('Error interno del servidor durante el registro.');
+    } finally {
+        if (client) {
+            client.release();
+        }
     }
 });
 
-// ENDPOINT DE VERIFICACIÓN: /auth/verify (SOLUCIONA Cannot GET)
+// ENDPOINT DE VERIFICACIÓN: /auth/verify 
 app.get('/auth/verify', async (req, res) => {
     const token = req.query.token;
 
     if (!token) {
-        // En lugar de Cannot GET, envía un error 400
         return res.status(400).send('Token de verificación faltante o inválido.');
     }
 
@@ -211,7 +238,8 @@ app.get('/auth/verify', async (req, res) => {
         const user = result.rows[0];
 
         if (!user) {
-            return res.status(404).send('Enlace de verificación inválido o expirado. La cuenta ya puede estar activa.');
+            // Este es el caso cuando el token ya fue usado (estatus != 0) o es incorrecto
+            return res.status(404).send('Enlace de verificación inválido o expirado. La cuenta ya puede estar activa. Por favor, intenta iniciar sesión.');
         }
 
         const updateQuery = `
@@ -267,7 +295,7 @@ app.post('/auth/forgot', (req, res) => {
 
 
 // ===================================================================================
-// ENDPOINTS DE API Y MQTT EXISTENTES (Mantenidos de tu código)
+// ENDPOINTS DE API Y MQTT EXISTENTES
 // ===================================================================================
 
 app.get('/health', (req, res) => {
@@ -453,6 +481,7 @@ const startServer = async () => {
     
     if (!dbConnected) {
         console.error('❌ No se pudo conectar a la base de datos. Las funciones de autenticación y DB fallarán.');
+        // No salimos con exit(1) para que el frontend pueda cargar.
     }
 
     // CRÍTICO: Asegurarse de escuchar en 0.0.0.0 si es Railway

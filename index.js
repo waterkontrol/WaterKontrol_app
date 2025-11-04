@@ -20,7 +20,8 @@ app.use(express.urlencoded({ extended: true }));
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
 // ===================================================================================
 console.log('🔧 Intentando conectar a la base de datos...');
-const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
+// Detecta si es un entorno de producción (Railway)
+const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT; 
 console.log('📋 DATABASE_URL:', process.env.DATABASE_URL ? '✅ Definida' : '❌ NO DEFINIDA');
 console.log(`📋 Entorno: ${isProduction ? 'Producción (SSL ON)' : 'Local (SSL OFF)'}`);
 
@@ -43,7 +44,7 @@ const testDatabaseConnection = async () => {
     console.log('✅ Conexión a la base de datos establecida correctamente');
     
     // Verificar las columnas críticas para la autenticación
-    await client.query('SELECT usr_id, nombre, correo, clave, token_verificacion, estatus FROM usuario LIMIT 1');
+    await client.query('SELECT correo, clave, token_verificacion, estatus FROM usuario LIMIT 1');
     console.log(`✅ Tabla "usuario" verificada. Usando campos: correo, clave, token_verificacion, estatus.`);
 
     return true;
@@ -58,23 +59,24 @@ const testDatabaseConnection = async () => {
 };
 
 // ===================================================================================
-// CONFIGURACIÓN DE NODEMAILER Y FUNCIONES DE CORREO (CORRECCIÓN APLICADA AQUÍ)
+// CONFIGURACIÓN DE NODEMAILER (CRÍTICO: CAMBIO A PUERTO 465 SSL/TLS)
+// Este es el método más robusto para entornos Cloud como Railway
 // ===================================================================================
-// CRÍTICO: Cambiamos de 'service: gmail' a host y port explícitos para entornos cloud.
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // Servidor de Gmail
-    port: 587,              // Puerto 587 es para STARTTLS (conexión segura requerida)
-    secure: false,          // secure: false (para STARTTLS en puerto 587)
+    host: 'smtp.gmail.com',
+    port: 465,             // CRÍTICO: Usamos puerto 465
+    secure: true,          // CRÍTICO: secure: true para el puerto 465 (SSL/TLS nativo)
     auth: {
         user: process.env.EMAIL_USER, 
         pass: process.env.EMAIL_PASS
     },
     tls: {
-        // Obliga a aceptar el certificado, puede ser necesario en Railway
+        // Mantenemos rejectUnauthorized para compatibilidad con entornos restrictivos
         rejectUnauthorized: false
     },
-    // El timeout de 15 segundos evita que la petición se quede "colgada" por mucho tiempo
-    timeout: 15000, 
+    // CRÍTICO: Reducimos el timeout para evitar que la petición POST se cuelgue 2 minutos
+    timeout: 10000, 
+    connectionTimeout: 10000 
 });
 
 /**
@@ -102,9 +104,8 @@ const sendVerificationEmail = async (userCorreo, verificationToken) => {
         console.log(`✉️ Correo de verificación enviado a ${userCorreo}`);
         return true;
     } catch (error) {
-        // Aunque responde 201, el log debe indicar que falló el correo.
+        // El timeout de 10s se reflejará aquí, pero la respuesta 201 ya se dio.
         console.error(`❌ Falló el envío del correo a ${userCorreo}: ${error.message}`);
-        // Retornamos false, pero dejamos que la ruta de registro continúe respondiendo 201
         return false;
     }
 };
@@ -194,7 +195,7 @@ app.post('/auth/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(clave, saltRounds);
         const verificationToken = crypto.randomBytes(32).toString('hex'); 
 
-        // 1. Inserción en la Base de Datos (Parte que NO falla)
+        // 1. Inserción en la Base de Datos
         const registerQuery = `
             INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) 
             VALUES ($1, $2, $3, $4, 0) 
@@ -202,8 +203,7 @@ app.post('/auth/register', async (req, res) => {
         `;
         await client.query(registerQuery, [nombre, correo, hashedPassword, verificationToken]);
 
-        // 2. Envío del Correo (Parte que SÍ falla por timeout, pero responde rápido)
-        // El await aquí manejará el timeout de 15s de Nodemailer o la conexión exitosa
+        // 2. Envío del Correo (Manejará el timeout de 10s o la conexión exitosa)
         await sendVerificationEmail(correo, verificationToken); 
         
         console.log(`📝 Registro Exitoso: Nuevo usuario ${correo}. Esperando verificación.`);

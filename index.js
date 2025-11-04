@@ -58,19 +58,22 @@ const testDatabaseConnection = async () => {
 };
 
 // ===================================================================================
-// CONFIGURACIÓN DE NODEMAILER Y FUNCIONES DE CORREO
+// CONFIGURACIÓN DE NODEMAILER Y FUNCIONES DE CORREO (CORRECCIÓN APLICADA AQUÍ)
 // ===================================================================================
+// CRÍTICO: Cambiamos de 'service: gmail' a host y port explícitos para entornos cloud.
 const transporter = nodemailer.createTransport({
-    service: 'gmail', 
+    host: 'smtp.gmail.com', // Servidor de Gmail
+    port: 587,              // Puerto 587 es para STARTTLS (conexión segura requerida)
+    secure: false,          // secure: false (para STARTTLS en puerto 587)
     auth: {
         user: process.env.EMAIL_USER, 
         pass: process.env.EMAIL_PASS
     },
-    // CRÍTICO: Añadir timeout de 15 segundos para evitar que la petición de registro se cuelgue
-    // Si el correo no responde en 15s, la promesa falla, pero la app de registro puede continuar.
-    // Esto previene los errores de POST 499/500 por timeout.
-    // Si sigue fallando por timeout, el problema es el firewall de Railway o la contraseña de aplicación.
-    // (Timeout está en milisegundos)
+    tls: {
+        // Obliga a aceptar el certificado, puede ser necesario en Railway
+        rejectUnauthorized: false
+    },
+    // El timeout de 15 segundos evita que la petición se quede "colgada" por mucho tiempo
     timeout: 15000, 
 });
 
@@ -99,8 +102,9 @@ const sendVerificationEmail = async (userCorreo, verificationToken) => {
         console.log(`✉️ Correo de verificación enviado a ${userCorreo}`);
         return true;
     } catch (error) {
-        console.error(`❌ Falló el envío del correo a ${userCorreo}:`, error.message);
-        // Retornamos false, pero dejamos que la ruta de registro continúe
+        // Aunque responde 201, el log debe indicar que falló el correo.
+        console.error(`❌ Falló el envío del correo a ${userCorreo}: ${error.message}`);
+        // Retornamos false, pero dejamos que la ruta de registro continúe respondiendo 201
         return false;
     }
 };
@@ -198,20 +202,19 @@ app.post('/auth/register', async (req, res) => {
         `;
         await client.query(registerQuery, [nombre, correo, hashedPassword, verificationToken]);
 
-        // 2. Envío del Correo (Parte que SÍ falla por timeout)
-        await sendVerificationEmail(correo, verificationToken); // Esto ahora maneja su propio error y timeout
-
+        // 2. Envío del Correo (Parte que SÍ falla por timeout, pero responde rápido)
+        // El await aquí manejará el timeout de 15s de Nodemailer o la conexión exitosa
+        await sendVerificationEmail(correo, verificationToken); 
         
         console.log(`📝 Registro Exitoso: Nuevo usuario ${correo}. Esperando verificación.`);
-        // CRÍTICO: Responder inmediatamente sin esperar a que el cliente se dé por vencido
+        // CRÍTICO: Responder inmediatamente con éxito (201) ya que el usuario SÍ está en DB
         res.status(201).send(`Registro Exitoso. Se ha enviado un correo de verificación a ${correo}. Por favor, revisa tu bandeja de entrada. (Puede tardar si hay problemas con el servidor de correo)`);
 
     } catch (error) {
         if (error.code === '23505') { 
             return res.status(409).send('El correo ya está registrado. Por favor, inicia sesión.');
         }
-        // Los errores de Nodemailer ya se manejan dentro de sendVerificationEmail,
-        // pero este catch maneja errores de DB o de hashing.
+        // Este catch solo debe atrapar errores de DB o de hashing.
         console.error('❌ Error en el proceso de registro (general):', error.message);
         res.status(500).send('Error interno del servidor durante el registro.');
     } finally {

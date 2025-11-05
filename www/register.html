@@ -10,7 +10,7 @@
     <div class="auth-container">
         <h2>Crear Cuenta</h2>
         
-        <form action="/auth/register" method="POST">
+        <form id="registerForm">
             <label for="nombre">Nombre Completo:</label>
             <input type="text" id="nombre" name="nombre" required>
 
@@ -21,10 +21,54 @@
             <input type="password" id="clave" name="clave" required>
 
             <button type="submit">Registrarse</button>
+            <p id="message" style="color: red; margin-top: 15px;"></p>
         </form>
         <div class="links">
             <a href="/">Ya tengo cuenta (Login)</a>
         </div>
     </div>
+    
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const messageElement = document.getElementById('message');
+            messageElement.textContent = 'Registrando...';
+            messageElement.style.color = 'blue';
+
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const response = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                // Intenta parsear JSON primero, ya sea éxito o error de API
+                const result = await response.json(); 
+
+                if (response.ok) {
+                    messageElement.textContent = result.message;
+                    messageElement.style.color = 'green';
+                    // Redirigir a la página de login
+                    setTimeout(() => {
+                        window.location.href = result.redirect || '/';
+                    }, 3000); 
+                } else {
+                    // Manejar errores de API con formato JSON
+                    messageElement.textContent = result.message || 'Error en el registro. Inténtalo de nuevo.';
+                    messageElement.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('Error de red:', error);
+                // Si falla al parsear JSON (como cuando recibe HTML), se muestra este error
+                messageElement.textContent = 'Error de conexión o el servidor no respondió correctamente.';
+                messageElement.style.color = 'red';
+            }
+        });
+    </script>
 </body>
 </html>

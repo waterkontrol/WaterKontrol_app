@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">WaterKontrolApp</string>
+    <string name="title_activity_main">WaterKontrolApp</string>
+    <string name="package_name">com.waterkontrol.app</string>
+    <string name="custom_url_scheme">com.waterkontrol.app</string>
+</resources>

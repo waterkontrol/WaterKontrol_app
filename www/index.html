@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - WaterKontrol</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="login-container">
+        <h1>Iniciar Sesión</h1>
+        <form id="loginForm">
+            <input type="email" name="correo" placeholder="Correo Electrónico" required>
+            <input type="password" name="clave" placeholder="Contraseña" required>
+            <button type="submit">Entrar</button>
+            <p id="message" style="color: red;"></p>
+            <p>¿No tienes cuenta? <a href="/register.html">Regístrate aquí</a></p>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const messageElement = document.getElementById('message');
+            messageElement.textContent = 'Iniciando sesión...';
+            messageElement.style.color = 'blue';
+
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                // Si la respuesta es exitosa (200 OK)
+                if (response.ok) {
+                    const result = await response.json();
+                    messageElement.textContent = result.message;
+                    messageElement.style.color = 'green';
+                    // El servidor ya estableció la cookie, ahora redirigimos
+                    window.location.href = result.redirect; 
+                } else {
+                    // Manejar errores como 401 (Credenciales inválidas) o 403 (No verificado)
+                    const errorText = await response.text();
+                    messageElement.textContent = errorText;
+                    messageElement.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('Error de red:', error);
+                messageElement.textContent = 'Error de conexión con el servidor.';
+                messageElement.style.color = 'red';
+            }
+        });
+    </script>
+</body>
+</html>

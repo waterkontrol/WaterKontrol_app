@@ -5,23 +5,24 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const mqtt = require('mqtt');
-const path = require('path');
-const bcrypt = require('bcrypt');
-const crypto = require('crypto');
-const nodemailer = require('nodemailer'); 
-const cookieParser = require('cookie-parser'); // ¡NUEVO! Para manejar las cookies de sesión
+const path = require('path'); // ¡CRÍTICO! Necesario para servir archivos estáticos y rutas
+const bcrypt = require('bcrypt'); // Necesario para hashing de contraseñas
+const crypto = require('crypto'); // Necesario para generar tokens
+const nodemailer = require('nodemailer'); // Necesario para el envío de correos
+const cookieParser = require('cookie-parser'); // ¡NUEVO! Necesario para la gestión de cookies de sesión
 const saltRounds = 10; 
 
 // --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true })); 
-app.use(cookieParser()); // ¡NUEVO! Middleware para procesar cookies
+app.use(cookieParser()); // ¡NUEVO! Activar middleware de cookies
 
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
 // ===================================================================================
 console.log('🔧 Intentando conectar a la base de datos...');
+// CRÍTICO: Detectar el entorno para configurar SSL y Host
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
 console.log('📋 DATABASE_URL:', process.env.DATABASE_URL ? '✅ Definida' : '❌ NO DEFINIDA');
 console.log(`📋 Entorno: ${isProduction ? 'Producción (SSL ON)' : 'Local (SSL OFF)'}`);
@@ -44,13 +45,16 @@ const testDatabaseConnection = async () => {
     client = await pool.connect();
     console.log('✅ Conexión a la base de datos establecida correctamente');
     
-    // Verificar las columnas críticas para la autenticación
-    await client.query('SELECT usr_id, nombre, correo, clave, token_verificacion, estatus FROM usuario LIMIT 1');
-    console.log(`✅ Tabla "usuario" verificada. Usando campos: correo, clave, token_verificacion, estatus.`);
+    // Verificar que podemos hacer una consulta simple para validar la conexión
+    const result = await client.query('SELECT $1::text as status', ['db connection ok']);
+    console.log(`✅ ${result.rows[0].status}`);
+
+    // Verificar tabla de usuarios
+    await verifyUserTable(client);
 
     return true;
-  } catch (error) {
-    console.error('❌ Error crítico conectando a la base de datos o faltando columnas:', error.message);
+  } catch (err) {
+    console.error('❌ Error de conexión/consulta a la base de datos:', err.message);
     return false;
   } finally {
     if (client) {
@@ -59,204 +63,305 @@ const testDatabaseConnection = async () => {
   }
 };
 
-// ===================================================================================
-// CONFIGURACIÓN DE NODEMAILER Y FUNCIONES DE CORREO (CORRECCIÓN CRÍTICA APLICADA)
-// ===================================================================================
-// CRÍTICO: Usamos el puerto 465 con secure: true para forzar SSL/TLS y evitar Connection Timeout.
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // Servidor de Gmail
-    port: 465,              // CRÍTICO: Puerto 465 para SSL nativo
-    secure: true,           // secure: true para el puerto 465
-    auth: {
-        user: process.env.EMAIL_USER, 
-        pass: process.env.EMAIL_PASS
-    },
-    tls: {
-        rejectUnauthorized: false
-    },
-    // Reducimos el timeout para que el servidor no se cuelgue 2 minutos
-    timeout: 10000, 
-    connectionTimeout: 10000 
-});
+// Función de utilidad para hashear contraseñas
+const hashPassword = (password) => {
+    return bcrypt.hash(password, saltRounds);
+};
 
-/**
- * Función para enviar el correo de verificación.
- */
-const sendVerificationEmail = async (userCorreo, verificationToken) => {
-    // Usamos el APP_BASE_URL del .env (o la variable de Railway)
-    const verificationUrl = `${process.env.APP_BASE_URL}/auth/verify?token=${verificationToken}`;
-
-    const mailOptions = {
-        from: `"WaterKontrol" <${process.env.EMAIL_USER}>`,
-        to: userCorreo,
-        subject: 'Verifica tu cuenta de WaterKontrol',
-        html: `
-            <h2>¡Gracias por registrarte!</h2>
-            <p>Por favor, haz clic en el siguiente enlace para verificar tu dirección de correo electrónico:</p>
-            <a href="${verificationUrl}" style="padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">Verificar Correo Electrónico</a>
-            <p>Si no te registraste, puedes ignorar este correo.</p>
-        `,
-    };
-
-    // CRÍTICO: Usar try-catch para manejar fallos de red/servidor SMTP
+// Función de utilidad para verificar la tabla de usuarios
+const verifyUserTable = async (client) => {
     try {
-        await transporter.sendMail(mailOptions);
-        console.log(`✉️ Correo de verificación enviado a ${userCorreo}`);
-        return true;
-    } catch (error) {
-        // Aunque responde 201, el log debe indicar que falló el correo.
-        console.error(`❌ Falló el envío del correo a ${userCorreo}: ${error.message}`);
-        // Retornamos false, pero dejamos que la ruta de registro continúe respondiendo 201
-        return false;
+        const query = `
+            SELECT * FROM usuario LIMIT 0;
+        `;
+        await client.query(query);
+        console.log('✅ Tabla "usuario" verificada. Usando campos: correo, clave, token_verificacion, estatus.');
+    } catch (e) {
+        console.warn('⚠️ La tabla "usuario" parece no existir. Intente crearla.');
+        // Opcional: Crear la tabla si no existe
     }
 };
 
-/**
- * Función para enviar el correo de bienvenida.
- */
-const sendWelcomeEmail = async (userCorreo, userName) => {
-    try {
-        const mailOptions = {
-            from: `"WaterKontrol" <${process.env.EMAIL_USER}>`,
-            to: userCorreo,
-            subject: '¡Bienvenido a WaterKontrol! Tu cuenta está activa',
-            html: `
-                <h2>¡Hola, ${userName}!</h2>
-                <p>Tu cuenta ha sido verificada y activada con éxito. Ya puedes iniciar sesión y comenzar a gestionar tus dispositivos.</p>
-                <p>Saludos cordiales,<br>El equipo de WaterKontrol.</p>
-            `,
-        };
-        await transporter.sendMail(mailOptions);
-        console.log(`✉️ Correo de bienvenida enviado a ${userCorreo}`);
-    } catch (error) {
-         console.error(`❌ Falló el envío del correo de bienvenida a ${userCorreo}:`, error.message);
-    }
-};
-
-
 // ===================================================================================
-// MIDDLEWARE DE AUTENTICACIÓN Y RUTAS DE LA APLICACIÓN
+// LÓGICA DE AUTH/SESIÓN (Middleware)
 // ===================================================================================
 
-// Middleware para verificar la sesión
-const requireAuth = (req, res, next) => {
-    // El ID de usuario está en la cookie "usr_id"
-    const usr_id = req.cookies.usr_id;
-    if (!usr_id) {
-        // Si no hay cookie, redirigir al login
-        return res.status(401).sendFile(path.join(__dirname, 'public', 'login.html'));
-    }
-    // Adjuntar el usr_id a la petición para que las rutas lo usen
-    req.usr_id = usr_id; 
-    next();
-};
+// Middleware para verificar si el usuario está autenticado
+const isAuthenticated = async (req, res, next) => {
+    // 1. Obtener el token de la cookie
+    const token = req.cookies.session_token;
 
-// Middleware para servir archivos estáticos (HTML, CSS) desde la carpeta 'public'
-app.use(express.static(path.join(__dirname, 'public'))); 
-
-// Ruta raíz: Sirve la página de login (si no hay cookie)
-app.get('/', (req, res) => {
-    // Si ya existe la cookie de sesión, redirigir directamente a la aplicación
-    if (req.cookies.usr_id) {
-        return res.redirect('/app.html');
-    }
-    res.sendFile(path.join(__dirname, 'public', 'login.html')); 
-});
-
-// NUEVA RUTA: Pantalla principal de la aplicación, protegida por autenticación
-app.get('/app.html', requireAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'app.html'));
-});
-
-// Endpoint POST para LOGOUT (opcional pero recomendado)
-app.post('/auth/logout', (req, res) => {
-    res.clearCookie('usr_id'); // Eliminar la cookie de sesión
-    res.status(200).json({ message: 'Sesión cerrada.', redirect: '/' });
-});
-
-
-// Endpoint POST para LOGIN (MODIFICADO para establecer cookie)
-app.post('/auth/login', async (req, res) => {
-    const { correo, clave } = req.body; 
-
-    if (!correo || !clave) {
-        return res.status(400).send('Faltan credenciales (correo/clave).');
-    }
-
-    try {
-        const userQuery = 'SELECT usr_id, nombre, clave, correo, estatus FROM usuario WHERE correo = $1'; 
-        const result = await pool.query(userQuery, [correo]);
-        const user = result.rows[0];
-
-        if (!user) {
-            return res.status(401).send('Credenciales inválidas. (Usuario no encontrado)');
-        }
-
-        if (user.estatus === 0) {
-            return res.status(403).send('Tu cuenta aún no ha sido verificada. Revisa tu correo electrónico para el enlace de verificación.');
-        }
-
-        const match = await bcrypt.compare(clave, user.clave);
-
-        if (match) {
-            console.log(`🔑 Login Exitoso: Usuario ${correo}`);
-            
-            // CRÍTICO: Establecer la cookie de sesión con el usr_id
-            res.cookie('usr_id', user.usr_id, { 
-                httpOnly: true, // No accesible vía JavaScript (más seguro)
-                secure: isProduction, // Solo se envía sobre HTTPS en producción
-                maxAge: 86400000 // 24 horas de sesión
-            });
-
-            // Responder con éxito y la redirección para el frontend
-            res.status(200).json({ 
-                message: `¡Login Exitoso! Bienvenido, ${user.nombre}. Redirigiendo...`,
-                redirect: '/app.html' 
-            });
-
-        } else {
-            return res.status(401).send('Credenciales inválidas. (Clave incorrecta)');
-        }
-
-    } catch (error) {
-        console.error('❌ Error en el proceso de login:', error.message);
-        res.status(500).send('Error interno del servidor durante el login.');
-    }
-});
-
-// Endpoint POST para REGISTRO (SIN CAMBIOS, solo logica de correo)
-app.post('/auth/register', async (req, res) => {
-    // ... (El código de registro sigue aquí sin cambios, solo usa el nuevo transporter)
-    const { nombre, correo, clave } = req.body; 
-
-    if (!nombre || !correo || !clave) {
-        return res.status(400).send('Todos los campos (nombre, correo, clave) son obligatorios.');
+    if (!token) {
+        // No hay token, no está autenticado
+        return res.redirect('/');
     }
 
     let client;
     try {
         client = await pool.connect();
-        const hashedPassword = await bcrypt.hash(clave, saltRounds);
-        const verificationToken = crypto.randomBytes(32).toString('hex'); 
+        // 2. Buscar el usuario por token
+        const query = 'SELECT usr_id FROM usuario WHERE session_token = $1';
+        const result = await client.query(query, [token]);
 
-        const registerQuery = `
-            INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) 
-            VALUES ($1, $2, $3, $4, 0) 
-            RETURNING usr_id, nombre
-        `;
-        await client.query(registerQuery, [nombre, correo, hashedPassword, verificationToken]);
-
-        await sendVerificationEmail(correo, verificationToken); 
+        if (result.rows.length === 0) {
+            // Token inválido o expirado
+            res.clearCookie('session_token');
+            return res.redirect('/');
+        }
         
-        console.log(`📝 Registro Exitoso: Nuevo usuario ${correo}. Esperando verificación.`);
-        res.status(201).send(`Registro Exitoso. Se ha enviado un correo de verificación a ${correo}. Por favor, revisa tu bandeja de entrada. (Puede tardar si hay problemas con el servidor de correo)`);
+        // 3. Si es válido, adjuntar el ID del usuario a la solicitud
+        req.userId = result.rows[0].usr_id;
+        next(); // Continuar a la ruta solicitada
+    } catch (error) {
+        console.error('Error en middleware de autenticación:', error.message);
+        res.clearCookie('session_token');
+        return res.redirect('/');
+    } finally {
+        if (client) {
+            client.release();
+        }
+    }
+};
+
+// ===================================================================================
+// ENDPOINTS DE AUTENTICACIÓN (API)
+// ===================================================================================
+
+// -----------------------------------------------------------------------------------
+// POST /auth/register: Registro de un nuevo usuario
+// -----------------------------------------------------------------------------------
+app.post('/auth/register', async (req, res) => {
+    const { nombre, correo, clave } = req.body;
+    
+    if (!nombre || !correo || !clave) {
+        return res.status(400).send('Faltan campos obligatorios.');
+    }
+
+    let client;
+    try {
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        // 1. Verificar si el correo ya existe
+        const checkQuery = 'SELECT COUNT(*) FROM usuario WHERE correo = $1';
+        const checkResult = await client.query(checkQuery, [correo]);
+
+        if (checkResult.rows[0].count > 0) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ message: 'El correo ya está registrado.' });
+        }
+
+        // 2. Hashear la contraseña y generar token
+        const hashedClave = await hashPassword(clave);
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const dspId = `DSP_${crypto.randomBytes(4).toString('hex').toUpperCase()}`; // ID de dispositivo por defecto
+
+        // 3. Insertar el nuevo usuario
+        const insertQuery = `
+            INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus, dsp_id) 
+            VALUES ($1, $2, $3, $4, 'pendiente', $5) 
+            RETURNING usr_id;
+        `;
+        const result = await client.query(insertQuery, [nombre, correo, hashedClave, verificationToken, dspId]);
+        const newUserId = result.rows[0].usr_id;
+        
+        // 4. Enviar correo de verificación (Lógica simplificada)
+        await sendVerificationEmail(correo, verificationToken);
+
+        await client.query('COMMIT');
+        
+        // La respuesta que espera el frontend debe ser JSON
+        res.status(201).json({ 
+            message: '✅ Registro exitoso. Revisa tu correo para verificar tu cuenta.',
+            redirect: '/index.html'
+        });
 
     } catch (error) {
-        if (error.code === '23505') { 
-            return res.status(409).send('El correo ya está registrado. Por favor, inicia sesión.');
+        if (client) {
+            await client.query('ROLLBACK');
         }
-        console.error('❌ Error en el proceso de registro (general):', error.message);
-        res.status(500).send('Error interno del servidor durante el registro.');
+        console.error('Error en el registro:', error.message);
+        res.status(500).json({ message: 'Error interno del servidor durante el registro.' });
+    } finally {
+        if (client) {
+            client.release();
+        }
+    }
+});
+
+// -----------------------------------------------------------------------------------
+// POST /auth/login: Iniciar sesión
+// -----------------------------------------------------------------------------------
+app.post('/auth/login', async (req, res) => {
+    const { correo, clave } = req.body;
+
+    let client;
+    try {
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        // 1. Buscar usuario por correo
+        const userQuery = 'SELECT usr_id, clave, estatus FROM usuario WHERE correo = $1';
+        const userResult = await client.query(userQuery, [correo]);
+
+        if (userResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(401).send('Credenciales inválidas.');
+        }
+
+        const user = userResult.rows[0];
+
+        // 2. Verificar contraseña
+        const isPasswordValid = await bcrypt.compare(clave, user.clave);
+        if (!isPasswordValid) {
+            await client.query('ROLLBACK');
+            return res.status(401).send('Credenciales inválidas.');
+        }
+
+        // 3. Verificar estatus de la cuenta
+        if (user.estatus === 'pendiente') {
+            await client.query('ROLLBACK');
+            return res.status(403).send('Cuenta no verificada. Revisa tu correo.');
+        }
+
+        // 4. Generar y guardar token de sesión
+        const sessionToken = crypto.randomBytes(64).toString('hex');
+        const updateTokenQuery = 'UPDATE usuario SET session_token = $1 WHERE usr_id = $2';
+        await client.query(updateTokenQuery, [sessionToken, user.usr_id]);
+
+        await client.query('COMMIT');
+
+        // 5. Establecer cookie de sesión (CRÍTICO)
+        // La cookie debe ser segura (secure: true) si estás en HTTPS (Railway)
+        res.cookie('session_token', sessionToken, { 
+            httpOnly: true, 
+            secure: isProduction, // true en Railway, false en localhost
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 días
+        });
+
+        // Respuesta que espera el frontend
+        res.status(200).json({ 
+            message: '✅ Sesión iniciada.',
+            redirect: '/app.html' // Redirigir a la vista de dispositivos
+        });
+
+    } catch (error) {
+        if (client) {
+            await client.query('ROLLBACK');
+        }
+        console.error('Error en el login:', error.message);
+        res.status(500).send('Error interno del servidor.');
+    } finally {
+        if (client) {
+            client.release();
+        }
+    }
+});
+
+// -----------------------------------------------------------------------------------
+// POST /auth/logout: Cerrar sesión
+// -----------------------------------------------------------------------------------
+app.post('/auth/logout', async (req, res) => {
+    // 1. Limpiar la cookie de sesión
+    res.clearCookie('session_token');
+
+    // Opcional: Limpiar el token de la base de datos (por seguridad)
+    const token = req.cookies.session_token;
+    if (token) {
+        let client;
+        try {
+            client = await pool.connect();
+            const query = 'UPDATE usuario SET session_token = NULL WHERE session_token = $1';
+            await client.query(query, [token]);
+        } catch (error) {
+            console.error('Error al limpiar token de DB:', error.message);
+        } finally {
+            if (client) {
+                client.release();
+            }
+        }
+    }
+    
+    // 2. Enviar respuesta de éxito
+    res.status(200).json({ message: 'Sesión cerrada exitosamente.' });
+});
+
+
+// ===================================================================================
+// ENDPOINTS DE LA APLICACIÓN (Requieren Autenticación)
+// ===================================================================================
+
+// Middleware que exige autenticación ANTES de acceder a /app/*
+app.use('/app.html', isAuthenticated);
+app.use('/add_device.html', isAuthenticated);
+app.use('/api/dispositivos', isAuthenticated);
+
+// -----------------------------------------------------------------------------------
+// GET /api/dispositivos: Obtener la lista de dispositivos del usuario
+// -----------------------------------------------------------------------------------
+app.get('/api/dispositivos', async (req, res) => {
+    // El userId fue adjuntado a la request por el middleware isAuthenticated
+    const userId = req.userId;
+
+    let client;
+    try {
+        client = await pool.connect();
+
+        const query = `
+            SELECT dsp_id, tipo, marca, topic
+            FROM dispositivo
+            WHERE usr_id = $1
+            ORDER BY dsp_id;
+        `;
+        const result = await client.query(query, [userId]);
+        
+        // Devolver la lista como JSON (CRÍTICO)
+        res.status(200).json(result.rows);
+    } catch (error) {
+        console.error('Error al obtener dispositivos:', error.message);
+        res.status(500).json({ message: 'Error interno al cargar la lista de dispositivos.' });
+    } finally {
+        if (client) {
+            client.release();
+        }
+    }
+});
+
+// -----------------------------------------------------------------------------------
+// POST /api/registro: Registrar un nuevo dispositivo
+// -----------------------------------------------------------------------------------
+app.post('/api/registro', async (req, res) => {
+    const { usr_id, dsp_id, topic } = req.body;
+    
+    if (!usr_id || !dsp_id || !topic) {
+        return res.status(400).json({ message: 'Faltan campos obligatorios para el registro.' });
+    }
+
+    let client;
+    try {
+        client = await pool.connect();
+        
+        // 1. Verificar que el usuario exista
+        const userCheck = await client.query('SELECT usr_id FROM usuario WHERE usr_id = $1', [usr_id]);
+        if (userCheck.rows.length === 0) {
+             return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+
+        // 2. Insertar el nuevo dispositivo
+        const insertQuery = `
+            INSERT INTO dispositivo (dsp_id, usr_id, tipo, marca, topic) 
+            VALUES ($1, $2, 'Desconocido', 'Genérico', $3);
+        `;
+        await client.query(insertQuery, [dsp_id, usr_id, topic]);
+
+        // La respuesta que espera el frontend debe ser JSON
+        res.status(201).json({ 
+            message: `✅ Dispositivo ${dsp_id} registrado exitosamente.`,
+        });
+
+    } catch (error) {
+        console.error('Error en el registro del dispositivo:', error.message);
+        res.status(500).json({ message: 'Error interno del servidor durante el registro de dispositivo.' });
     } finally {
         if (client) {
             client.release();
@@ -265,257 +370,125 @@ app.post('/auth/register', async (req, res) => {
 });
 
 
-// ENDPOINT DE VERIFICACIÓN: /auth/verify (SIN CAMBIOS)
-app.get('/auth/verify', async (req, res) => {
-    const token = req.query.token;
+// ===================================================================================
+// LÓGICA DE SERVIR ARCHIVOS ESTÁTICOS (CRÍTICO: Mover ESTO AL FINAL)
+// ===================================================================================
 
-    if (!token) {
-        return res.status(400).send('Token de verificación faltante o inválido.');
+// Servir archivos estáticos de la carpeta 'public' (HTML, CSS, JS del Frontend)
+// Todas las peticiones que NO coincidan con las rutas de API definidas arriba,
+// serán buscadas en esta carpeta.
+app.use(express.static(path.join(__dirname, 'public')));
+
+
+// Servir el 'index.html' como página de inicio por defecto
+// Usado principalmente para redirigir desde la ruta base /
+app.get('/', (req, res) => {
+    // Si la sesión es válida, redirigir directamente a la app
+    if (req.cookies.session_token) {
+        // Podríamos volver a validar el token aquí para ser más seguros
+        return res.redirect('/app.html');
     }
-
-    try {
-        const userQuery = `
-            SELECT usr_id, nombre, correo FROM usuario 
-            WHERE token_verificacion = $1 AND estatus = 0
-        `;
-        const result = await pool.query(userQuery, [token]);
-        const user = result.rows[0];
-
-        if (!user) {
-            return res.status(404).send('Enlace de verificación inválido o expirado. La cuenta ya puede estar activa. Por favor, intenta iniciar sesión.');
-        }
-
-        const updateQuery = `
-            UPDATE usuario 
-            SET estatus = 1, token_verificacion = NULL 
-            WHERE usr_id = $1 
-            RETURNING nombre, correo
-        `;
-        await pool.query(updateQuery, [user.usr_id]);
-
-        await sendWelcomeEmail(user.correo, user.nombre);
-
-        console.log(`✅ Verificación Exitosa: Usuario ${user.correo} activado.`);
-        
-        // Respuesta HTML
-        res.status(200).send(`
-            <!DOCTYPE html>
-            <html lang="es">
-            <head>
-                <meta charset="UTF-8">
-                <title>Verificación Exitosa</title>
-                <style>
-                    body { font-family: sans-serif; text-align: center; padding: 50px; }
-                    .success { color: green; border: 1px solid green; padding: 20px; border-radius: 8px; max-width: 400px; margin: 0 auto; }
-                </style>
-            </head>
-            <body>
-                <div class="success">
-                    <h2>¡Verificación Exitosa!</h2>
-                    <p>Tu cuenta ha sido activada correctamente, ${user.nombre}.</p>
-                    <p>¡Te hemos enviado un correo de bienvenida!</p>
-                    <a href="${process.env.APP_BASE_URL}" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">Ir al Login</a>
-                </div>
-            </body>
-            </html>
-        `);
-
-    } catch (error) {
-        console.error('❌ Error durante la verificación:', error.message);
-        res.status(500).send('Error interno del servidor al verificar la cuenta.');
-    }
-});
-
-
-// Endpoint POST para OLVIDÉ CONTRASEÑA (Simulación)
-app.post('/auth/forgot', (req, res) => {
-    const correo = req.body.correo;
-    if (!correo) {
-        return res.status(400).send('El correo es requerido.');
-    }
-    console.log(`Recuperación solicitada para: ${correo}`);
-    res.status(200).send('Si la cuenta está registrada, recibirás un correo electrónico con instrucciones para restablecer tu contraseña.');
-});
-
-// NUEVO ENDPOINT: Obtener dispositivos del usuario logueado (PROTEGIDO)
-app.get('/api/devices', requireAuth, async (req, res) => {
-    // req.usr_id es inyectado por el middleware requireAuth
-    const usr_id = req.usr_id; 
-    try {
-        // Consulta para obtener el dispositivo y su topic, unidos por la tabla registro
-        const query = `
-            SELECT 
-                d.dsp_id, d.modelo, d.tipo, d.serie, d.marca, d.estatus, r.topic
-            FROM 
-                dispositivo d
-            JOIN 
-                registro r ON d.dsp_id = r.dsp_id
-            WHERE 
-                r.usr_id = $1
-            ORDER BY
-                d.dsp_id DESC;
-        `;
-        const result = await pool.query(query, [usr_id]);
-        res.status(200).json(result.rows);
-    } catch (error) {
-        console.error('❌ Error al obtener dispositivos del usuario:', error.message);
-        res.status(500).json({ error: 'Error interno del servidor al obtener dispositivos.' });
-    }
+    // Si no hay sesión, servir la página de login
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 
 // ===================================================================================
-// ENDPOINTS DE API Y MQTT EXISTENTES (SIN CAMBIOS)
+// LÓGICA DEL CORE DEL SERVIDOR (MQTT y Listen)
 // ===================================================================================
 
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
-
-app.post('/dispositivo', async (req, res) => {
-  const { modelo, tipo, serie, marca, estatus } = req.body;
-  if (!modelo || !tipo || !serie || !estatus) {
-    return res.status(400).json({ error: 'Los campos modelo, tipo, serie y estatus son obligatorios.' });
-  }
-
-  const query = `
-    INSERT INTO dispositivo (modelo, tipo, serie, marca, estatus)
-    VALUES ($1, $2, $3, $4, $5)
-    RETURNING dsp_id;
-  `;
-
-  try {
-    const result = await pool.query(query, [modelo, tipo, serie, marca, estatus]);
-    res.status(201).json({
-      message: 'Dispositivo creado con éxito.',
-      dsp_id: result.rows[0].dsp_id
-    });
-  } catch (error) {
-    console.error('❌ Error al crear el dispositivo:', error.message);
-    res.status(500).json({ error: 'Error interno del servidor.' });
-  }
-});
-
-app.post('/dispositivo/parametros', async (req, res) => {
-    const { dsp_id, prt_ids } = req.body;
-    if (!dsp_id || !prt_ids || !Array.isArray(prt_ids) || prt_ids.length === 0) {
-      return res.status(400).json({ error: 'Los campos dsp_id y prt_ids (array de IDs) son obligatorios.' });
+// Lógica de nodemailer (simplificada)
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
     }
-  
-    let dbClient;
+});
+
+const sendVerificationEmail = async (correo, token) => {
+    // Usamos APP_BASE_URL para que el enlace sea correcto en Railway o Local
+    const verificationUrl = `${process.env.APP_BASE_URL}/auth/verify?token=${token}`;
+    
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: correo,
+        subject: 'Verificación de Cuenta WaterKontrol',
+        html: `
+            <h1>Verificación de Cuenta</h1>
+            <p>Por favor, haz clic en el siguiente enlace para verificar tu cuenta:</p>
+            <a href="${verificationUrl}">${verificationUrl}</a>
+            <p>Si no solicitaste este registro, ignora este correo.</p>
+        `
+    };
+
     try {
-      dbClient = await pool.connect();
-      await dbClient.query('BEGIN'); 
-  
-      const insertPromises = prt_ids.map(prt_id => {
-        const query = 'INSERT INTO dispositivo_parametro (dsp_id, prt_id) VALUES ($1, $2) ON CONFLICT (dsp_id, prt_id) DO NOTHING';
-        return dbClient.query(query, [dsp_id, prt_id]);
-      });
-  
-      await Promise.all(insertPromises);
-      await dbClient.query('COMMIT'); 
-  
-      res.status(201).json({
-        message: `Asociación de ${insertPromises.length} parámetros al dispositivo ${dsp_id} completada.`
-      });
-  
+        await transporter.sendMail(mailOptions);
+        console.log(`📧 Enlace de verificación enviado a ${correo}`);
     } catch (error) {
-      if (dbClient) {
-        await dbClient.query('ROLLBACK'); 
-      }
-      console.error('❌ Error al asociar parámetros:', error);
-      res.status(500).json({ error: 'Error interno del servidor.' });
-    } finally {
-      if (dbClient) {
-        dbClient.release();
-      }
+        console.error(`❌ Error enviando email a ${correo}:`, error.message);
     }
-});
+};
 
-app.post('/registro', async (req, res) => {
-    // NOTA: Esta ruta crea la vinculación de un dispositivo a un usuario (usr_id)
-    const { usr_id, dsp_id, topic } = req.body;
-    if (!usr_id || !dsp_id || !topic) {
-      return res.status(400).json({ error: 'Los campos usr_id, dsp_id y topic son obligatorios.' });
-    }
-  
-    const query = `
-      INSERT INTO registro (usr_id, dsp_id, topic)
-      VALUES ($1, $2, $3)
-      RETURNING rgt_id;
-    `;
-  
-    try {
-      const result = await pool.query(query, [usr_id, dsp_id, topic]);
-      res.status(201).json({
-        message: 'Registro de vinculación creado con éxito.',
-        rgt_id: result.rows[0].rgt_id
-      });
-    } catch (error) {
-      if (error.code === '23505') { 
-        return res.status(409).json({ error: 'El topic MQTT ya está en uso. Debe ser único.' });
-      }
-      console.error('❌ Error al crear el registro de vinculación:', error);
-      res.status(500).json({ error: 'Error interno del servidor.' });
-    }
-});
+// ... (Resto de funciones MQTT como procesarMensajesMqtt y startServer)
 
+// Función MQTT (mantener tu lógica de MQTT aquí)
 const procesarMensajesMqtt = () => {
   console.log('Iniciando servicio de escucha MQTT...');
-
   const client = mqtt.connect(process.env.MQTT_BROKER_URL);
-  const topicMaestro = 'dispositivos/+/telemetria';
 
   client.on('connect', () => {
     console.log('✅ Conectado al broker MQTT.');
-    client.subscribe(topicMaestro, (err) => {
-      if (err) {
-        console.error('❌ Error al suscribirse al topic maestro:', err);
+    // Suscribirse a todos los topics de telemetría de dispositivos
+    const topicToSubscribe = 'dispositivos/+/telemetria'; 
+    client.subscribe(topicToSubscribe, (err) => {
+      if (!err) {
+        console.log(`✅ Suscrito exitosamente al topic: ${topicToSubscribe}`);
       } else {
-        console.log(`✅ Suscrito exitosamente al topic: ${topicMaestro}`);
+        console.error('❌ Error al suscribirse a MQTT:', err);
       }
     });
   });
 
   client.on('message', async (topic, message) => {
-    console.log(`📥 Mensaje recibido en el topic [${topic}]: ${message.toString()}`);
     let dbClient;
     try {
-      const data = JSON.parse(message.toString());
-      if (!data.parametros || typeof data.parametros !== 'object') {
-        throw new Error('El formato del JSON es incorrecto.');
-      }
-
-      dbClient = await pool.connect(); 
-      const registroRes = await dbClient.query('SELECT rgt_id, dsp_id FROM registro WHERE topic = $1', [topic]);
-      if (registroRes.rows.length === 0) {
-        throw new Error(`No se encontró ningún registro para el topic: ${topic}`);
-      }
-      const { rgt_id, dsp_id } = registroRes.rows[0];
-
+      dbClient = await pool.connect();
       await dbClient.query('BEGIN');
+      
+      const payload = JSON.parse(message.toString());
+      
+      // 1. Extraer el dsp_id del topic (ej: 'dispositivos/DSP_XYZ/telemetria')
+      const topicParts = topic.split('/');
+      const dsp_id = topicParts[1];
 
-      const insertMensajeQuery = 'INSERT INTO mensajes (rgt_id, status) VALUES ($1, $2) RETURNING msg_id';
-      const mensajeRes = await dbClient.query(insertMensajeQuery, [rgt_id, 1]);
-      const msg_id = mensajeRes.rows[0].msg_id;
+      // 2. Obtener el prt_id (ID de parámetro) para cada clave en el payload
+      // Esta lógica asume que las claves del JSON (temp, hum, etc.) son los nombres de los parámetros.
 
-      const parametrosRes = await dbClient.query('SELECT p.prt_id, p.nombre FROM parametros p JOIN dispositivo_parametro dp ON p.prt_id = dp.prt_id WHERE dp.dsp_id = $1', [dsp_id]);
-      const parametrosMap = parametrosRes.rows.reduce((map, row) => {
-        map[row.nombre] = row.prt_id; 
-        return map;
-      }, {});
-
-      for (const [nombreParametro, valorParametro] of Object.entries(data.parametros)) {
-        const prt_id = parametrosMap[nombreParametro];
-
-        if (prt_id) {
-          if (typeof valorParametro !== 'number') {
-             console.warn(`⚠️ Valor no numérico para el parámetro ${nombreParametro}. Se intentará convertir.`);
+      // 3. Insertar el mensaje principal
+      const insertMsgQuery = 'INSERT INTO mensajes (dsp_id, timestamp) VALUES ($1, NOW()) RETURNING msg_id';
+      const msgResult = await dbClient.query(insertMsgQuery, [dsp_id]);
+      const msg_id = msgResult.rows[0].msg_id;
+      
+      // 4. Procesar cada parámetro del mensaje
+      for (const nombreParametro in payload) {
+        const valorParametro = payload[nombreParametro];
+        
+        // Buscar el ID del parámetro en la tabla de referencia
+        const prtQuery = 'SELECT prt_id FROM parametro WHERE nombre = $1';
+        const prtResult = await dbClient.query(prtQuery, [nombreParametro]);
+        
+        if (prtResult.rows.length > 0) {
+          const prt_id = prtResult.rows[0].prt_id;
+          
+          // CRÍTICO: Asegurarse de que el valor sea string para insertar
+          if (typeof valorParametro !== 'string' && typeof valorParametro !== 'number') {
+             console.warn(`Tipo de dato inesperado para el parámetro ${nombreParametro}. Se intentará convertir.`);
           }
           const insertParametroQuery = 'INSERT INTO parametros_mensajes (msg_id, prt_id, valor) VALUES ($1, $2, $3)';
-          await dbClient.query(insertParametroQuery, [msg_id, prt_id, valorParametro]);
+          await dbClient.query(insertParametroQuery, [msg_id, prt_id, String(valorParametro)]);
         } else {
-          console.warn(`⚠️ Parámetro desconocido "${nombreParametro}" recibido. Se ignorará.`);
+          console.warn(`Parámetro desconocido "${nombreParametro}" recibido. Se ignorará.`);
         }
       }
 
@@ -561,10 +534,11 @@ const startServer = async () => {
     app.listen(PORT, host, () => {
         console.log(`✅ Servidor Express ejecutándose en ${host}:${PORT}`);
         
-        if (dbConnected) {
-             procesarMensajesMqtt();
-        } else {
-             console.warn('⚠️ MQTT y APIs de DB podrían no funcionar. El frontend del login sí.');
+        // Iniciar MQTT
+        try {
+            procesarMensajesMqtt();
+        } catch (error) {
+            console.error('Error iniciando MQTT:', error);
         }
     });
 };

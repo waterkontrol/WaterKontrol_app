@@ -1,88 +1,35 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Login - WaterKontrol</title>
-    <link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8">
+  <title>Login - WaterKontrol</title>
 </head>
 <body>
-    <div class="auth-container">
-        <h1>Iniciar Sesión</h1>
-        <form id="loginForm">
-            <input type="email" name="correo" placeholder="Correo Electrónico" required>
-            <input type="password" name="clave" placeholder="Contraseña" required>
-            <button type="submit">Entrar</button>
-         
-           <p id="message" style="color: red; margin-top: 15px;"></p>
-            <div class="links">
-                <a href="/register.html">Regístrate aquí</a>
-                <a href="/forgot.html">Olvidé mi contraseña</a>
-            </div>
-        </form>
-    </div>
+  <h1>Iniciar Sesión</h1>
+  <input type="email" id="correo" placeholder="Correo" value="test@test.com"><br>
+  <input type="password" id="clave" placeholder="Clave" value="123456"><br>
+  <button onclick="login()">Entrar</button>
+  <pre id="result"></pre>
 
-    <script>
-        document.getElementById('loginForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const messageElement = document.getElementById('message');
-            messageElement.textContent = 'Iniciando sesión...';
-            messageElement.style.color = 'blue';
+  <script>
+    async function login() {
+      const correo = document.getElementById('correo').value;
+      const clave = document.getElementById('clave').value;
+      const result = document.getElementById('result');
 
-            const submitButton = this.querySelector('button[type="submit"]');
-            submitButton.disabled = true;
-
-            const formData = new FormData(this);
-            const data = Object.fromEntries(formData.entries());
-
-            try {
-                const response = await fetch('/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                });
-
-                // AHORA intentamos leer la respuesta como JSON.
-                // Si el servidor envía HTML (como un 404), fallará aquí y saltará al CATCH.
-                // Si envía un error JSON (como 401), continuará al 'if'.
-                const result = await response.json();
-
-                // Verificamos si la respuesta fue exitosa (status 200-299)
-                if (response.ok) {
-                    messageElement.textContent = result.message;
-                    messageElement.style.color = 'green';
-                    // El servidor ya estableció la cookie, ahora redirigimos
-                    setTimeout(() => {
-                        window.location.href = result.redirect; 
-                    }, 500);
-                } else {
-                    // Si response.ok es falso (ej: 401, 403, 500)
-                    // 'result' contendrá el JSON de error (ej: { message: "Credenciales inválidas." })
-                    messageElement.textContent = result.message || `Error desconocido (Status: ${response.status})`;
-                    messageElement.style.color = 'red';
-                }
-            } catch (error) {
-                // Este 'catch' se activa si 'fetch' falla (no hay red) 
-                // o si 'response.json()' falla (el error que estás viendo)
-                console.error('Error de red o parseo:', error);
-                messageElement.textContent = 'Error de conexión con el servidor.';
-                messageElement.style.color = 'red';
-            } finally {
-                submitButton.disabled = false;
-            }
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ correo, clave })
         });
-        
-        // Manejar mensaje de verificación exitosa (si viene de /auth/verify)
-        const urlParams = new URLSearchParams(window.location.search);
-        const successMessage = urlParams.get('message');
-        if (successMessage) {
-            const messageElement = document.getElementById('message');
-            messageElement.textContent = successMessage;
-            messageElement.style.color = 'green';
-            // Limpiar la URL para que el mensaje no persista al recargar
-            history.replaceState(null, '', window.location.pathname);
-        }
-    </script>
+
+        const text = await res.text(); // ← leemos como texto primero
+        result.textContent = `Status: ${res.status}\nRespuesta:\n${text}`;
+      } catch (err) {
+        result.textContent = '❌ Error de red: ' + err.message;
+      }
+    }
+  </script>
 </body>
 </html>

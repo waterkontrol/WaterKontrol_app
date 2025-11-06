@@ -2,17 +2,17 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Login - WaterKontrol</title>
+  <title>Test /auth/login</title>
 </head>
 <body>
-  <h1>Iniciar Sesión</h1>
+  <h2>Test /auth/login</h2>
   <input type="email" id="correo" placeholder="Correo" value="test@test.com"><br>
   <input type="password" id="clave" placeholder="Clave" value="123456"><br>
-  <button onclick="login()">Entrar</button>
+  <button onclick="testLogin()">Enviar</button>
   <pre id="result"></pre>
 
   <script>
-    async function login() {
+    async function testLogin() {
       const correo = document.getElementById('correo').value;
       const clave = document.getElementById('clave').value;
       const result = document.getElementById('result');

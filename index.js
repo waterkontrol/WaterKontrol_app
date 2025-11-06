@@ -369,7 +369,7 @@ app.get('/dispositivos', (req, res) => {
 app.use(express.static(path.join(__dirname, 'www')));
 
 // ===================================================================================
-// LÓGICA DE INICIO DEL SERVIDOR (CRÍTICO PARA RAILWAY)
+// LÓGICA DE INICIO DEL SERVIDOR (CRÍTICO PARA RAILWAY )
 // ===================================================================================
 
 const PORT = process.env.PORT || 8080;

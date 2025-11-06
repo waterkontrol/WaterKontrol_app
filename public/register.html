@@ -14,6 +14,7 @@
             <label for="nombre">Nombre Completo:</label>
             <input type="text" id="nombre" name="nombre" required>
 
+        
             <label for="correo">Correo:</label>
             <input type="email" id="correo" name="correo" required>
 
@@ -24,6 +25,7 @@
             <p id="message" style="margin-top: 15px;"></p>
         </form>
         <div class="links">
+     
            <a href="/">Ya tengo cuenta (Login)</a>
         </div>
     </div>
@@ -33,6 +35,7 @@
             e.preventDefault();
             const messageElement = document.getElementById('message');
             
+            // Mostrar mensaje de carga
             messageElement.textContent = 'Registrando...';
             messageElement.style.color = 'blue';
 
@@ -43,7 +46,7 @@
             const data = Object.fromEntries(formData.entries());
 
             try {
-                const response = await fetch('https://waterkontrolapp-production.up.railway.app/auth/register', {
+                const response = await fetch('/auth/register', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -51,19 +54,22 @@
                     body: JSON.stringify(data)
                 });
 
+                // Primero leemos el JSON, que puede ser de éxito o de error
                 const result = await response.json();
 
-                if (response.ok) {
+                if (response.ok) { // Status 201
                     messageElement.textContent = result.message;
                     messageElement.style.color = 'green';
+                    // Opcional: Redirigir al login
                     setTimeout(() => {
-                        window.location.href = '/';
+                        window.location.href = '/'; 
                     }, 3000);
-                } else {
+                } else { // Status 409 (Conflicto), 400 (Faltan campos), 500
                     messageElement.textContent = result.message || `Error desconocido (Status: ${response.status})`;
                     messageElement.style.color = 'red';
                 }
             } catch (error) {
+                // Esto se activa si response.json() falla (porque recibió HTML)
                 console.error('Error de red o parseo:', error);
                 messageElement.textContent = 'Error de conexión con el servidor.';
                 messageElement.style.color = 'red';

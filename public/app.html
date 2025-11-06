@@ -119,13 +119,15 @@
 
         async function loadDevices() {
             loadingMessage.textContent = 'Cargando dispositivos...';
-            deviceList.innerHTML = '';
+            deviceList.innerHTML = ''; // Limpiar la lista anterior
 
             try {
-                const response = await fetch('https://waterkontrolapp-production.up.railway.app/dispositivos');
+                const response = await fetch('/api/dispositivos');
 
                 if (response.status === 401 || response.status === 403) {
-                    window.location.href = '/';
+                    // Si no está autenticado, el middleware de Express debería redirigir.
+                    // Esto es un fallback en el cliente.
+                    window.location.href = '/'; 
                     return;
                 }
                 
@@ -141,15 +143,16 @@
                     return;
                 }
 
-                loadingMessage.style.display = 'none';
+                loadingMessage.style.display = 'none'; // Ocultar mensaje de carga
 
                 devices.forEach(device => {
                     const statusText = device.estatus === 'online' ? 'Online' : 'Offline';
                     const statusColor = device.estatus === 'online' ? '#28a745' : '#dc3545';
                     const statusClass = device.estatus === 'online' ? 'status-online' : 'status-offline';
 
-                    const temp = device.ultimos_valores?.temperatura || 'N/A';
-                    const ph = device.ultimos_valores?.ph || 'N/A';
+                    // Valores de telemetría simulados (vienen del backend)
+                    const temp = device.ultimos_valores.temperatura || 'N/A';
+                    const ph = device.ultimos_valores.ph || 'N/A';
                     
                     const card = document.createElement('div');
                     card.className = `device-card ${statusClass}`;
@@ -174,13 +177,15 @@
             }
         }
 
+        // Lógica para el botón de Cerrar Sesión
         document.getElementById('logoutButton').addEventListener('click', async () => {
             try {
-                const response = await fetch('https://waterkontrolapp-production.up.railway.app/auth/logout', {
+                const response = await fetch('/auth/logout', {
                     method: 'POST'
                 });
                 if (response.ok) {
-                    window.location.href = '/';
+                    // El servidor ya borró la cookie, solo redirigimos
+                    window.location.href = '/'; 
                 } else {
                     alert('Error al cerrar la sesión.');
                 }

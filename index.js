@@ -20,6 +20,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// ✅ CORS explícito para evitar bloqueos en frontend
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
 // ===================================================================================
@@ -53,9 +62,7 @@ const testDatabaseConnection = async () => {
     console.error('❌ Error crítico al conectar/verificar la DB:', error.message);
     return false;
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
@@ -201,14 +208,10 @@ const procesarMensajesMqtt = () => {
       await dbClient.query('COMMIT');
       console.log(`✅ Mensaje del topic [${topic}] procesado y guardado con éxito (MSG_ID: ${msg_id}).`);
     } catch (error) {
-      if (dbClient) {
-        await dbClient.query('ROLLBACK');
-      }
+      if (dbClient) await dbClient.query('ROLLBACK');
       console.error(`❌ Error procesando mensaje del topic [${topic}]:`, error.message);
     } finally {
-      if (dbClient) {
-        dbClient.release();
-      }
+      if (dbClient) dbClient.release();
     }
   });
 

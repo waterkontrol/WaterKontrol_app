@@ -30,14 +30,18 @@
   <script>
     document.getElementById('registerForm').addEventListener('submit', async function (e) {
       e.preventDefault();
+
       const message = document.getElementById('message');
-      const button = this.querySelector('button');
+      const button = this.querySelector('button[type="submit"]');
       button.disabled = true;
       message.textContent = 'Registrando...';
       message.className = 'message';
 
-      const formData = new FormData(this);
-      const data = Object.fromEntries(formData.entries());
+      const data = {
+        nombre: document.getElementById('nombre').value.trim(),
+        correo: document.getElementById('correo').value.trim(),
+        clave: document.getElementById('clave').value
+      };
 
       try {
         const res = await fetch('/auth/register', {
@@ -53,11 +57,12 @@
           message.className = 'message success';
           setTimeout(() => window.location.href = '/login.html', 2000);
         } else {
-          message.textContent = result.message;
+          message.textContent = result.message || 'Error desconocido';
           message.className = 'message error';
         }
       } catch (err) {
-        message.textContent = 'Error de conexión';
+        console.error('Error al registrar:', err);
+        message.textContent = '❌ Error de conexión con el servidor.';
         message.className = 'message error';
       } finally {
         button.disabled = false;

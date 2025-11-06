@@ -26,7 +26,8 @@
   <script>
     document.getElementById('loginForm').addEventListener('submit', async function (e) {
       e.preventDefault();
-      const correo = document.getElementById('correo').value;
+
+      const correo = document.getElementById('correo').value.trim();
       const clave = document.getElementById('clave').value;
       const message = document.getElementById('message');
 
@@ -51,7 +52,8 @@
           message.className = 'message error';
         }
       } catch (err) {
-        message.textContent = '❌ Error de red';
+        console.error('Error al iniciar sesión:', err);
+        message.textContent = '❌ Error de conexión con el servidor.';
         message.className = 'message error';
       }
     });

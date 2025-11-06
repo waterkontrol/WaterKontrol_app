@@ -6,10 +6,11 @@
   "scripts": {
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "rm -rf www && mkdir -p www && cp -R public/. www", 
+    "build": "rimraf www && mkdir www && xcopy public www /E /I /Y", 
     "cap:sync": "npm run build && npx cap sync",
     "cap:android": "npm run cap:sync && npx cap open android"
   },
+  
   "keywords": [
     "node",
     "express",
@@ -22,18 +23,19 @@
   "dependencies": {
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.6",
+    "cordova-plugin-hotspot": "1.2.9",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "mqtt": "^5.14.1",
     "nodemailer": "^6.10.1",
     "path": "^0.12.7",
-    "pg": "^8.16.3",
-    "cordova-plugin-hotspot": "1.2.9" 
+    "pg": "^8.16.3"
   },
   "devDependencies": {
-    "tslib": "^2.6.3",
-    "@capacitor/cli": "6.2.1",
     "@capacitor/android": "6.2.1",
-    "@capacitor/core": "6.2.1"
+    "@capacitor/cli": "6.2.1",
+    "@capacitor/core": "6.2.1",
+    "rimraf": "^6.1.0",
+    "tslib": "^2.6.3"
   }
 }

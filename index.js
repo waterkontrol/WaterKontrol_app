@@ -284,7 +284,7 @@ app.get('/auth/verify', async (req, res) => {
   }
 });
 
-// ✅ ESTA ES LA RUTA QUE FALTABA / ESTABA MAL UBICADA
+// ✅ AHORA SÍ ESTÁ ANTES DE STATIC
 app.post('/auth/login', async (req, res) => {
   const { correo, clave } = req.body;
   let client;

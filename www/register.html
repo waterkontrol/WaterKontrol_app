@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WaterKontrol - Registro</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <div class="auth-container">
@@ -14,6 +14,7 @@
             <label for="nombre">Nombre Completo:</label>
             <input type="text" id="nombre" name="nombre" required>
 
+        
             <label for="correo">Correo:</label>
             <input type="email" id="correo" name="correo" required>
 
@@ -21,19 +22,25 @@
             <input type="password" id="clave" name="clave" required>
 
             <button type="submit">Registrarse</button>
-            <p id="message" style="color: red; margin-top: 15px;"></p>
+            <p id="message" style="margin-top: 15px;"></p>
         </form>
         <div class="links">
-            <a href="/">Ya tengo cuenta (Login)</a>
+     
+           <a href="/">Ya tengo cuenta (Login)</a>
         </div>
     </div>
-    
+
     <script>
         document.getElementById('registerForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const messageElement = document.getElementById('message');
+            
+            // Mostrar mensaje de carga
             messageElement.textContent = 'Registrando...';
             messageElement.style.color = 'blue';
+
+            const submitButton = this.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
 
             const formData = new FormData(this);
             const data = Object.fromEntries(formData.entries());
@@ -47,26 +54,27 @@
                     body: JSON.stringify(data)
                 });
 
-                // Intenta parsear JSON primero, ya sea éxito o error de API
-                const result = await response.json(); 
+                // Primero leemos el JSON, que puede ser de éxito o de error
+                const result = await response.json();
 
-                if (response.ok) {
+                if (response.ok) { // Status 201
                     messageElement.textContent = result.message;
                     messageElement.style.color = 'green';
-                    // Redirigir a la página de login
+                    // Opcional: Redirigir al login
                     setTimeout(() => {
-                        window.location.href = result.redirect || '/';
-                    }, 3000); 
-                } else {
-                    // Manejar errores de API con formato JSON
-                    messageElement.textContent = result.message || 'Error en el registro. Inténtalo de nuevo.';
+                        window.location.href = '/'; 
+                    }, 3000);
+                } else { // Status 409 (Conflicto), 400 (Faltan campos), 500
+                    messageElement.textContent = result.message || `Error desconocido (Status: ${response.status})`;
                     messageElement.style.color = 'red';
                 }
             } catch (error) {
-                console.error('Error de red:', error);
-                // Si falla al parsear JSON (como cuando recibe HTML), se muestra este error
-                messageElement.textContent = 'Error de conexión o el servidor no respondió correctamente.';
+                // Esto se activa si response.json() falla (porque recibió HTML)
+                console.error('Error de red o parseo:', error);
+                messageElement.textContent = 'Error de conexión con el servidor.';
                 messageElement.style.color = 'red';
+            } finally {
+                submitButton.disabled = false;
             }
         });
     </script>

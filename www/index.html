@@ -6,14 +6,18 @@
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <div class="login-container">
+    <div class="auth-container">
         <h1>Iniciar Sesión</h1>
         <form id="loginForm">
             <input type="email" name="correo" placeholder="Correo Electrónico" required>
             <input type="password" name="clave" placeholder="Contraseña" required>
             <button type="submit">Entrar</button>
-            <p id="message" style="color: red;"></p>
-            <p>¿No tienes cuenta? <a href="/register.html">Regístrate aquí</a></p>
+         
+           <p id="message" style="color: red; margin-top: 15px;"></p>
+            <div class="links">
+                <a href="/register.html">Regístrate aquí</a>
+                <a href="/forgot.html">Olvidé mi contraseña</a>
+            </div>
         </form>
     </div>
 
@@ -39,13 +43,12 @@
                     body: JSON.stringify(data)
                 });
 
-                // Primero, obtenemos la respuesta (como JSON o texto)
-                // Usamos .json() solo si esperamos JSON, y lo ponemos en un try/catch
-                // o lo leemos como texto si no estamos seguros.
-                // Aquí, sabemos que la API *debería* devolver JSON incluso en error.
+                // AHORA intentamos leer la respuesta como JSON.
+                // Si el servidor envía HTML (como un 404), fallará aquí y saltará al CATCH.
+                // Si envía un error JSON (como 401), continuará al 'if'.
                 const result = await response.json();
 
-                // AHORA verificamos si la respuesta fue exitosa (status 200-299)
+                // Verificamos si la respuesta fue exitosa (status 200-299)
                 if (response.ok) {
                     messageElement.textContent = result.message;
                     messageElement.style.color = 'green';
@@ -61,7 +64,7 @@
                 }
             } catch (error) {
                 // Este 'catch' se activa si 'fetch' falla (no hay red) 
-                // o si 'response.json()' falla (si el servidor envió HTML, por ejemplo)
+                // o si 'response.json()' falla (el error que estás viendo)
                 console.error('Error de red o parseo:', error);
                 messageElement.textContent = 'Error de conexión con el servidor.';
                 messageElement.style.color = 'red';

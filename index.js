@@ -84,12 +84,12 @@ const verifyToken = async (token) => {
     client = await pool.connect();
     const result = await client.query(
       'SELECT correo FROM usuario WHERE token_verificacion = $1 AND estatus = $2',
-      [token, 'PENDIENTE']
+      [token, 0] // 0 = PENDIENTE
     );
     if (result.rows.length === 1) {
       await client.query(
         'UPDATE usuario SET estatus = $1, token_verificacion = NULL WHERE correo = $2',
-        ['ACTIVO', result.rows[0].correo]
+        [1, result.rows[0].correo] // 1 = ACTIVO
       );
       return { success: true };
     }
@@ -253,7 +253,7 @@ app.post('/auth/register', async (req, res) => {
 
     await client.query(
       'INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) VALUES ($1, $2, $3, $4, $5)',
-      [nombre, correo, hashedClave, verificationToken, 'PENDIENTE']
+      [nombre, correo, hashedClave, verificationToken, 0] // ✅ 0 = PENDIENTE
     );
     sendVerificationEmail(correo, verificationToken);
 
@@ -299,7 +299,7 @@ app.post('/auth/login', async (req, res) => {
 
     const user = userResult.rows[0];
 
-    if (user.estatus !== 'ACTIVO') {
+    if (user.estatus !== 1) { // ✅ 1 = ACTIVO
       return res.status(403).json({
         message: 'Cuenta pendiente de verificación. Revisa tu correo.',
         error_code: 'ACCOUNT_PENDING'
@@ -369,7 +369,7 @@ app.get('/dispositivos', (req, res) => {
 app.use(express.static(path.join(__dirname, 'www')));
 
 // ===================================================================================
-// LÓGICA DE INICIO DEL SERVIDOR (CRÍTICO PARA RAILWAY )
+// LÓGICA DE INICIO DEL SERVIDOR (CRÍTICO PARA RAILWAY)
 // ===================================================================================
 
 const PORT = process.env.PORT || 8080;

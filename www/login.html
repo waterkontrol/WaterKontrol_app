@@ -18,14 +18,18 @@
       const result = document.getElementById('result');
 
       try {
-        const res = await fetch('/auth/login', {
+        const res = await fetch('https://waterkontrolapp-production.up.railway.app/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ correo, clave })
         });
 
-        const text = await res.text(); // ← leemos como texto primero
+        const text = await res.text();
         result.textContent = `Status: ${res.status}\nRespuesta:\n${text}`;
+
+        if (res.ok) {
+          window.location.href = '/app.html';
+        }
       } catch (err) {
         result.textContent = '❌ Error de red: ' + err.message;
       }

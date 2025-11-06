@@ -5,31 +5,29 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const mqtt = require('mqtt');
-const path = require('path'); // ¡CRÍTICO! Necesario para servir archivos estáticos y rutas
-const bcrypt = require('bcrypt'); // Necesario para hashing de contraseñas
-const crypto = require('crypto'); // Necesario para generar tokens
-const nodemailer = require('nodemailer'); // Necesario para el envío de correos
-const cookieParser = require('cookie-parser'); // Necesario para la gestión de cookies de sesión
+const path = require('path'); 
+const bcrypt = require('bcrypt'); 
+const crypto = require('crypto'); 
+const nodemailer = require('nodemailer'); 
+const cookieParser = require('cookie-parser'); 
 const saltRounds = 10; 
 
 // --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
-app.use(express.json()); // Middleware para que Express entienda peticiones JSON
-app.use(express.urlencoded({ extended: true })); // Para que Express entienda datos de formularios
-app.use(cookieParser()); // Activar middleware de cookies
+app.use(express.json()); 
+app.use(express.urlencoded({ extended: true })); 
+app.use(cookieParser()); 
 
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
 // ===================================================================================
 console.log('🔧 Intentando conectar a la base de datos...');
-// CRÍTICO: Detectar el entorno para configurar SSL y Host
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
 console.log('📋 DATABASE_URL:', process.env.DATABASE_URL ? '✅ Definida' : '❌ NO DEFINIDA');
 console.log(`📋 Entorno: ${isProduction ? 'Producción (SSL ON)' : 'Local (SSL OFF)'}`);
 
 const poolConfig = {
   connectionString: process.env.DATABASE_URL, 
-  // CRÍTICO: Configuración SSL para Railway
   ssl: isProduction ? { rejectUnauthorized: false } : false, 
   connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 30000,
@@ -38,22 +36,16 @@ const poolConfig = {
 
 const pool = new Pool(poolConfig);
 
-// Verificar conexión a la base de datos al inicio
 const testDatabaseConnection = async () => {
   let client;
   try {
     client = await pool.connect();
     console.log('✅ Conexión a la base de datos establecida correctamente');
-    
-    // Verificar que podemos hacer una consulta simple
     const result = await client.query('SELECT 1 as db_connection_ok');
     if (result.rows[0].db_connection_ok === 1) {
         console.log('✅ db connection ok');
     }
-
-    // Opcional: Verificar la tabla 'usuario' y sus campos (asumiendo que ya tienes esta lógica)
     await initializeDatabase(client);
-
     return true;
   } catch (error) {
     console.error('❌ Error crítico al conectar/verificar la DB:', error.message);
@@ -65,9 +57,7 @@ const testDatabaseConnection = async () => {
   }
 };
 
-// Inicializar la DB (Creación de tablas si no existen)
 const initializeDatabase = async (client) => {
-    // ⚠️ ATENCIÓN: Esta parte asume la existencia de la tabla 'usuario' en tu esquema.
     const checkUserTable = await client.query(`
         SELECT column_name
         FROM information_schema.columns
@@ -80,7 +70,6 @@ const initializeDatabase = async (client) => {
     if (requiredColumns.every(col => foundColumns.includes(col))) {
         console.log(`✅ Tabla "usuario" verificada. Usando campos: ${foundColumns.join(', ')}.`);
     } else {
-        // Lógica de creación de tabla omitida.
         console.warn('⚠️ La tabla "usuario" puede necesitar ser creada o revisada.');
     }
 }
@@ -129,7 +118,6 @@ const authenticateToken = (req, res, next) => {
         }
     }
     
-    // ⚠️ RECOMENDACIÓN: Implementa JWT o una verificación real de token en DB para API routes.
     return next(); 
 };
 
@@ -205,9 +193,8 @@ const procesarMensajesMqtt = () => {
       console.log(`[${new Date().toISOString()}] Mensaje de MQTT en [${topic}]:`, data);
 
       dbClient = await pool.connect();
-      await dbClient.query('BEGIN'); // Iniciar transacción
+      await dbClient.query('BEGIN'); 
 
-      // ⚠️ Asumo que tienes una tabla 'telemetria' con 'topic', 'nivel', 'fecha'
       const insertQuery = `
         INSERT INTO telemetria (topic, nivel, fecha)
         VALUES ($1, $2, NOW())
@@ -216,7 +203,7 @@ const procesarMensajesMqtt = () => {
       const result = await dbClient.query(insertQuery, [topic, data.nivel]);
       const msg_id = result.rows[0].id;
       
-      await dbClient.query('COMMIT'); // Confirmar transacción
+      await dbClient.query('COMMIT'); 
       console.log(`✅ Mensaje del topic [${topic}] procesado y guardado con éxito (MSG_ID: ${msg_id}).`);
 
     } catch (error) {
@@ -241,11 +228,7 @@ const procesarMensajesMqtt = () => {
 // RUTAS ESTÁTICAS Y MIDDLEWARE DE AUTENTICACIÓN
 // ===================================================================================
 
-// Middleware para proteger todas las rutas excepto las estáticas y de autenticación
 app.use(authenticateToken); 
-
-// Servir archivos estáticos (HTML, CSS, JS del frontend)
-// CRÍTICO: La carpeta 'www' contiene el build de Capacitor (Frontend).
 app.use(express.static(path.join(__dirname, 'www')));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -254,21 +237,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 // RUTAS DE LA API (ENDPOINT)
 // ===================================================================================
 
-// RUTA DE HEALTHCHECK (CRÍTICO: debe responder rápido)
 app.get('/health', (req, res) => {
-    // Si el servidor Express está vivo, responde 200 OK.
-    // Esto satisface el Healthcheck de Railway.
     res.status(200).send({ status: 'OK', service: 'waterkontrol-backend' });
 });
 
-// Ruta por defecto: Redirige al login.html
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'www', 'index.html'));
 });
 
-// Ruta para el dashboard (protegida)
 app.get('/app.html', (req, res) => {
-    // La protección de redirección ya está en authenticateToken, pero se mantiene como backup
     if (!req.cookies.session_token) {
         return res.redirect('/');
     }
@@ -284,38 +261,39 @@ app.post('/auth/register', async (req, res) => {
     let client;
 
     if (!nombre || !correo || !clave) {
-        return res.status(400).send('Faltan campos obligatorios.');
+        // CORRECCIÓN: Devolver JSON en caso de error
+        return res.status(400).json({ message: 'Faltan campos obligatorios.' });
     }
     
     try {
         client = await pool.connect();
         
-        // 1. Verificar si el usuario ya existe
         const existingUser = await client.query('SELECT * FROM usuario WHERE correo = $1', [correo]);
         if (existingUser.rows.length > 0) {
-            return res.status(409).send('El correo ya está registrado.');
+            // CORRECCIÓN: Devolver JSON en caso de error
+            return res.status(409).json({ message: 'El correo ya está registrado.' });
         }
 
-        // 2. Hash de la contraseña
         const hashedClave = await bcrypt.hash(clave, saltRounds);
-        
-        // 3. Generar token de verificación
         const verificationToken = crypto.randomBytes(32).toString('hex');
 
-        // 4. Insertar usuario (estatus PENDIENTE)
         await client.query(
             'INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) VALUES ($1, $2, $3, $4, $5)',
             [nombre, correo, hashedClave, verificationToken, 'PENDIENTE']
         );
 
-        // 5. Enviar correo de verificación (no bloquea la respuesta)
         sendVerificationEmail(correo, verificationToken); 
         
-        res.status(201).send('Registro exitoso. Revisa tu correo para verificar la cuenta.');
+        // Respuesta exitosa: siempre JSON
+        res.status(201).json({ 
+            message: 'Registro exitoso. Revisa tu correo para verificar la cuenta.',
+            verification_sent: true
+        });
 
     } catch (error) {
         console.error('Error al registrar usuario:', error);
-        res.status(500).send('Error interno del servidor al registrar.');
+        // CORRECCIÓN: Devolver JSON en caso de error
+        res.status(500).json({ message: 'Error interno del servidor al registrar.' });
     } finally {
         if (client) client.release();
     }
@@ -330,9 +308,9 @@ app.get('/auth/verify', async (req, res) => {
     const { success, message } = await verifyToken(token);
     
     if (success) {
-        // Redirigir al login
         res.redirect('/?message=✅ Cuenta verificada. Puedes iniciar sesión.');
     } else {
+        // En este caso mantenemos send() porque es una ruta de redirección que el navegador maneja directamente
         res.status(400).send(`❌ Error de Verificación: ${message}`);
     }
 });
@@ -346,32 +324,38 @@ app.post('/auth/login', async (req, res) => {
         const userResult = await client.query('SELECT * FROM usuario WHERE correo = $1', [correo]);
         
         if (userResult.rows.length === 0) {
-            return res.status(401).send('Credenciales inválidas.');
+            // CORRECCIÓN: Devolver JSON en caso de error
+            return res.status(401).json({ message: 'Credenciales inválidas.' });
         }
 
         const user = userResult.rows[0];
         
         // 1. Verificar estatus
         if (user.estatus !== 'ACTIVO') {
-            return res.status(403).send('Cuenta pendiente de verificación. Revisa tu correo.');
+            // CRÍTICO - ERROR 403: Devolver JSON en caso de error
+            return res.status(403).json({ 
+                message: 'Cuenta pendiente de verificación. Revisa tu correo.',
+                error_code: 'ACCOUNT_PENDING'
+            });
         }
 
         // 2. Comparar contraseña
         const isMatch = await bcrypt.compare(clave, user.clave);
 
         if (!isMatch) {
-            return res.status(401).send('Credenciales inválidas.');
+            // CORRECCIÓN: Devolver JSON en caso de error
+            return res.status(401).json({ message: 'Credenciales inválidas.' });
         }
 
-        // 3. Crear Token de Sesión (simplificado: usa JWT en producción)
+        // 3. Crear Token de Sesión
         const sessionToken = crypto.randomBytes(64).toString('hex'); 
 
-        // 4. Establecer la cookie de sesión (CRÍTICO para la app)
+        // 4. Establecer la cookie de sesión
         res.cookie('session_token', sessionToken, { 
-            httpOnly: true, // No accesible por JavaScript en el navegador
-            secure: isProduction, // Solo se envía con HTTPS en producción
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días de validez
-            sameSite: 'Lax' // Buena opción por defecto
+            httpOnly: true, 
+            secure: isProduction, 
+            maxAge: 7 * 24 * 60 * 60 * 1000, 
+            sameSite: 'Lax' 
         });
         
         // 5. Respuesta exitosa
@@ -382,28 +366,24 @@ app.post('/auth/login', async (req, res) => {
 
     } catch (error) {
         console.error('Error en el login:', error);
-        res.status(500).send('Error interno del servidor.');
+        // CORRECCIÓN: Devolver JSON en caso de error
+        res.status(500).json({ message: 'Error interno del servidor.' });
     } finally {
         if (client) client.release();
     }
 });
 
 app.post('/auth/logout', (req, res) => {
-    // Eliminar la cookie de sesión
     res.clearCookie('session_token');
-    res.status(200).send('Sesión cerrada.');
+    // CORRECCIÓN: Devolver JSON para la app
+    res.status(200).json({ message: 'Sesión cerrada.' }); 
 });
 
-// Ruta para registrar un dispositivo
 app.post('/dispositivo', async (req, res) => {
-    // ⚠️ ATENCIÓN: Esta ruta es conceptual. Requiere autenticación y el ID de usuario.
     const { usr_id, dsp_id, topic, tipo, marca } = req.body;
     
-    // Aquí iría la lógica para insertar el dispositivo en la tabla 'dispositivo'
-    // ...
-    
     console.log(`📌 Dispositivo ${dsp_id} intentando registrarse con topic ${topic}.`);
-    res.status(200).send({ message: 'Registro de dispositivo recibido (Lógica pendiente de implementar).', dsp_id });
+    res.status(200).json({ message: 'Registro de dispositivo recibido (Lógica pendiente de implementar).', dsp_id });
 });
 
 
@@ -413,7 +393,6 @@ app.post('/dispositivo', async (req, res) => {
 
 const PORT = process.env.PORT || 8080; 
 
-// FUNCIÓN PARA LA LÓGICA DE INICIALIZACIÓN LENTA (DB, MQTT)
 const initializeApplicationServices = async () => {
     console.log('🔍 Iniciando verificación de base de datos y MQTT (en segundo plano)...');
     
@@ -421,10 +400,9 @@ const initializeApplicationServices = async () => {
     
     if (!dbConnected) {
         console.error('❌ No se pudo conectar a la base de datos. Las funciones de autenticación y DB fallarán.');
-        // No salimos con exit(1). El servidor Express sigue vivo para el Healthcheck.
     } else {
-        // Iniciar MQTT solo si la conexión a BD fue exitosa
         try {
+            // Iniciar MQTT solo si la conexión a BD fue exitosa
             procesarMensajesMqtt();
         } catch (error) {
             console.error('❌ Error iniciando MQTT:', error);
@@ -432,7 +410,6 @@ const initializeApplicationServices = async () => {
     }
 };
 
-// FUNCIÓN PARA INICIAR EXPRESS INMEDIATAMENTE
 const startServer = () => {
     console.log('🚀 Iniciando servidor Express...');
     
@@ -448,5 +425,4 @@ const startServer = () => {
     });
 };
 
-// Llama a la función de inicio
 startServer();

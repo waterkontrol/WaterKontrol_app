@@ -3,19 +3,35 @@
 <head>
   <meta charset="UTF-8">
   <title>Login - WaterKontrol</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>Iniciar Sesión</h1>
-  <input type="email" id="correo" placeholder="Correo" value="test@test.com"><br>
-  <input type="password" id="clave" placeholder="Clave" value="123456"><br>
-  <button onclick="login()">Entrar</button>
-  <pre id="result"></pre>
+  <div class="auth-container">
+    <h2>Iniciar Sesión</h2>
+    <form id="loginForm">
+      <label for="correo">Correo:</label>
+      <input type="email" id="correo" name="correo" placeholder="tu@correo.com" required>
+
+      <label for="clave">Contraseña:</label>
+      <input type="password" id="clave" name="clave" placeholder="Contraseña" required>
+
+      <button type="submit">Entrar</button>
+      <p id="message" class="message"></p>
+    </form>
+    <div class="links">
+      <a href="/register.html">¿No tienes cuenta? Regístrate</a>
+    </div>
+  </div>
 
   <script>
-    async function login() {
+    document.getElementById('loginForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
       const correo = document.getElementById('correo').value;
       const clave = document.getElementById('clave').value;
-      const result = document.getElementById('result');
+      const message = document.getElementById('message');
+
+      message.textContent = 'Iniciando sesión...';
+      message.className = 'message';
 
       try {
         const res = await fetch('/auth/login', {
@@ -24,12 +40,21 @@
           body: JSON.stringify({ correo, clave })
         });
 
-        const text = await res.text(); // ← leemos como texto primero
-        result.textContent = `Status: ${res.status}\nRespuesta:\n${text}`;
+        const data = await res.json();
+
+        if (res.ok) {
+          message.textContent = '✅ Redirigiendo...';
+          message.className = 'message success';
+          window.location.href = data.redirect;
+        } else {
+          message.textContent = data.message || 'Error desconocido';
+          message.className = 'message error';
+        }
       } catch (err) {
-        result.textContent = '❌ Error de red: ' + err.message;
+        message.textContent = '❌ Error de red';
+        message.className = 'message error';
       }
-    }
+    });
   </script>
 </body>
 </html>

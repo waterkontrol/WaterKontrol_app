@@ -1,190 +1,170 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Añadir Dispositivo - WaterKontrol</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f7f9;
-            color: #333;
-        }
-        .header {
-            background-color: #007bff;
-            color: white;
-            padding: 15px 20px;
-            text-align: center;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 1.5em;
-        }
-        .back-btn {
-            background-color: #6c757d;
-            color: white;
-            padding: 8px 15px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            text-decoration: none;
-            font-size: 0.9em;
-        }
-        .back-btn:hover {
-            background-color: #5a6268;
-        }
-        .container {
-            padding: 20px;
-            max-width: 500px;
-            margin: 30px auto;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h2 {
-            color: #007bff;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input[type="text"], 
-        input[type="password"],
-        select {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        .action-button {
-            background-color: #28a745;
-            color: white;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 100%;
-            font-size: 1em;
-            margin-top: 10px;
-        }
-        .action-button:hover:not(:disabled) {
-            background-color: #1e7e34;
-        }
-        .action-button:disabled {
-            background-color: #8fcc9c;
-            cursor: not-allowed;
-        }
-        .message {
-            margin-top: 15px;
-            padding: 10px;
-            border-radius: 4px;
-            font-weight: bold;
-            display: none;
-        }
-        .message.success {
-            background-color: #d4edda;
-            border-color: #c3e6cb;
-            color: #155724;
-        }
-        .message.error {
-            background-color: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24;
-        }
-
-        /* Estilos específicos para la sección de WiFi */
-        .wifi-section {
-            border: 1px solid #ced4da;
-            padding: 15px;
-            border-radius: 4px;
-            margin-top: 20px;
-        }
-        #wifi-list {
-            list-style: none;
-            padding: 0;
-            max-height: 150px;
-            overflow-y: auto;
-            border: 1px solid #eee;
-            margin-top: 10px;
-        }
-        #wifi-list li {
-            padding: 8px 10px;
-            cursor: pointer;
-            border-bottom: 1px solid #eee;
-        }
-        #wifi-list li:hover {
-            background-color: #e9ecef;
-        }
-        #wifi-list li.selected {
-            background-color: #007bff;
-            color: white;
-        }
-
-        /* Icono de lista (para el botón de escanear) */
-        .icon-list {
-            vertical-align: middle;
-            margin-right: 5px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Añadir Dispositivo - WaterKontrol</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f7f9;
+      color: #333;
+    }
+    .header {
+      background-color: #007bff;
+      color: white;
+      padding: 15px 20px;
+      text-align: center;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 1.5em;
+    }
+    .back-btn {
+      background-color: #6c757d;
+      color: white;
+      padding: 8px 15px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 0.9em;
+    }
+    .container {
+      padding: 20px;
+      max-width: 500px;
+      margin: 30px auto;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #007bff;
+      border-bottom: 2px solid #007bff;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    input[type="text"], input[type="password"], select {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    .action-button {
+      background-color: #28a745;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      width: 100%;
+      font-size: 1em;
+      margin-top: 10px;
+    }
+    .action-button:disabled {
+      background-color: #8fcc9c;
+      cursor: not-allowed;
+    }
+    .message {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 4px;
+      font-weight: bold;
+      display: none;
+    }
+    .message.success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    .message.error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    .wifi-section {
+      border: 1px solid #ced4da;
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
+    #wifi-list {
+      list-style: none;
+      padding: 0;
+      max-height: 150px;
+      overflow-y: auto;
+      border: 1px solid #eee;
+      margin-top: 10px;
+    }
+    #wifi-list li {
+      padding: 8px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    #wifi-list li:hover {
+      background-color: #e9ecef;
+    }
+    #wifi-list li.selected {
+      background-color: #007bff;
+      color: white;
+    }
+  </style>
 </head>
 <body>
-    <div class="header">
-        <a href="/app.html" class="back-btn">← Volver</a>
-        <h1>Añadir Dispositivo WaterKontrol</h1>
-        <span></span>
-    </div>
-    
-    <div class="container">
-        <h2>Paso 1: Configurar Dispositivo (Wi-Fi)</h2>
-        <p>⚠️ **CRÍTICO:** Para completar este paso, tu celular/PC debe estar conectado a la red Wi-Fi temporal del dispositivo (ej: **WaterKontrol-AP**).</p>
+  <div class="header">
+    <a href="/app.html" class="back-btn">← Volver</a>
+    <h1>Añadir Dispositivo WaterKontrol</h1>
+    <span></span>
+  </div>
 
-        <form id="config-form">
-            
-            <label for="ssid">Red Wi-Fi de tu Hogar/Oficina:</label>
-            <div class="wifi-section">
-                <button type="button" id="scan-wifi-btn" class="action-button" style="background-color: #ffc107; color: black;">
-                    <span class="icon-list">📶</span> Escanear Redes
-                </button>
-                <select id="ssid" required>
-                    <option value="">-- Selecciona una Red --</option>
-                    </select>
-                <p>O introduce el SSID manualmente si no aparece en la lista:</p>
-                <input type="text" id="manual-ssid" placeholder="Ingresa SSID Manualmente">
-            </div>
+  <div class="container">
+    <h2>Paso 1: Configurar Dispositivo (Wi-Fi)</h2>
+    <p>⚠️ <strong>CRÍTICO:</strong> Para completar este paso, tu celular/PC debe estar conectado a la red Wi-Fi temporal del dispositivo (ej: <strong>WaterKontrol-AP</strong>).</p>
 
-            <label for="password">Contraseña de la Red Wi-Fi:</label>
-            <input type="password" id="password" required>
+    <form id="config-form">
+      <label for="ssid">Red Wi-Fi de tu Hogar/Oficina:</label>
+      <div class="wifi-section">
+        <button type="button" id="scan-wifi-btn" class="action-button" style="background-color: #ffc107; color: black;">
+          📶 Escanear Redes
+        </button>
+        <select id="ssid" required>
+          <option value="">-- Selecciona una Red --</option>
+        </select>
+        <p>O introduce el SSID manualmente si no aparece en la lista:</p>
+        <input type="text" id="manual-ssid" placeholder="Ingresa SSID Manualmente">
+      </div>
 
-            <label for="serie">Número de Serie del Dispositivo (Ej: WKM-0001):</label>
-            <input type="text" id="serie" required>
+      <label for="password">Contraseña de la Red Wi-Fi:</label>
+      <input type="password" id="password" required>
 
-            <button type="submit" id="submitButton" class="action-button">
-                Enviar Credenciales al Dispositivo
-            </button>
-        </form>
+      <label for="serie">Número de Serie del Dispositivo (Ej: WKM-0001):</label>
+      <input type="text" id="serie" required>
 
-        <div id="message" class="message"></div>
-    </div>
+      <button type="submit" id="submitButton" class="action-button">
+        Enviar Credenciales al Dispositivo
+      </button>
+    </form>
 
-    <script src="add_device_config.js"></script>
-    
-    <script>
-        document.getElementById('ssid').addEventListener('change', function() {
-            document.getElementById('manual-ssid').value = ''; // Limpiar manual si se selecciona del select
-        });
-        document.getElementById('manual-ssid').addEventListener('input', function() {
-            document.getElementById('ssid').selectedIndex = 0; // Limpiar select si se escribe manualmente
-        });
-    </script>
+    <div id="message" class="message"></div>
+  </div>
+
+  <script src="add_device_config.js"></script>
+  <script>
+    document.getElementById('ssid').addEventListener('change', function () {
+      document.getElementById('manual-ssid').value = '';
+    });
+    document.getElementById('manual-ssid').addEventListener('input', function () {
+      document.getElementById('ssid').selectedIndex = 0;
+    });
+  </script>
 </body>
 </html>

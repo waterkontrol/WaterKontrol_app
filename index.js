@@ -15,7 +15,7 @@ const saltRounds = 10;
 // --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
 
-// MIDDLEWARE PRINCIPAL (Debe ir primero para parsear body/cookies)
+// MIDDLEWARE PRINCIPAL
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -105,20 +105,17 @@ const verifyToken = async (token) => {
 const authenticateToken = (req, res, next) => {
   const token = req.cookies.session_token;
 
-  if (req.path.startsWith('/auth') || req.path === '/' || req.path.endsWith('.css') || req.path.endsWith('.js') || req.path === '/register.html' || req.path === '/forgot.html') {
+  const publicPaths = ['/auth/login', '/auth/register', '/auth/verify', '/login.html', '/register.html', '/index.html', '/forgot.html', '/style.css', '/test-login.html'];
+
+  if (publicPaths.some(path => req.path.startsWith(path))) {
     return next();
   }
 
-  if (req.path.includes('/app.html') || req.path === '/dispositivos' || req.path === '/dispositivo' || req.path === '/auth/logout') {
-    if (!token) {
-      if (req.path !== '/app.html') {
-        return res.status(401).json({ message: 'No autorizado' });
-      }
-      return res.redirect('/');
-    }
+  if (!token) {
+    return res.redirect('/login.html');
   }
 
-  return next();
+  next();
 };
 
 // ===================================================================================
@@ -278,13 +275,12 @@ app.get('/auth/verify', async (req, res) => {
   const { success, message } = await verifyToken(token);
 
   if (success) {
-    res.redirect('/?message=✅ Cuenta verificada. Puedes iniciar sesión.');
+    res.redirect('/login.html?message=✅ Cuenta verificada. Puedes iniciar sesión.');
   } else {
     res.status(400).send(`❌ Error de Verificación: ${message}`);
   }
 });
 
-// ✅ AHORA SÍ ESTÁ ANTES DE STATIC
 app.post('/auth/login', async (req, res) => {
   const { correo, clave } = req.body;
   let client;
@@ -333,7 +329,6 @@ app.post('/auth/login', async (req, res) => {
 
 // ===================================================================================
 // MIDDLEWARE DE AUTENTICACIÓN
-// (Se aplica a todo lo que esté definido DESPUÉS de él)
 // ===================================================================================
 app.use(authenticateToken);
 
@@ -346,32 +341,39 @@ app.post('/auth/logout', (req, res) => {
   res.status(200).json({ message: 'Sesión cerrada.' });
 });
 
-app.post('/dispositivo', async (req, res) => {
-  const { usr_id, dsp_id, topic, tipo, marca } = req.body;
-  console.log(`📌 Dispositivo ${dsp_id} intentando registrarse con topic ${topic}.`);
-  res.status(200).json({ message: 'Registro de dispositivo recibido (Lógica pendiente de implementar).', dsp_id });
+app.post('/api/dispositivo/registro', async (req, res) => {
+  const { serie, modelo, tipo, marca, topic } = req.body;
+
+  if (!serie || !modelo || !tipo || !marca || !topic) {
+    return res.status(400).json({ message: 'Faltan campos obligatorios.' });
+  }
+
+  res.status(200).json({ message: 'Dispositivo registrado exitosamente.' });
 });
 
-app.get('/dispositivos', (req, res) => {
+app.get('/api/dispositivos', async (req, res) => {
   const mockDevices = [
-    { id: 1, nombre: 'Tanque Principal', tipo: 'Nivel', marca: 'WaterKontrol', topic: 'dispositivos/tk-001/telemetria', estatus: 'ACTIVO' },
-    { id: 2, nombre: 'Pozo de Bombeo', tipo: 'Bomba', marca: 'WK-Pro', topic: 'dispositivos/pozo-002/telemetria', estatus: 'INACTIVO' }
+    {
+      serie: 'WKM-0001',
+      modelo: 'Medidor pH/Temp',
+      tipo: 'Medidor',
+      marca: 'WaterKontrol',
+      topic: 'dispositivos/WKM-0001/telemetria',
+      estatus: 'online',
+      ultimos_valores: { temperatura: 25, ph: 7.2 }
+    }
   ];
   res.json(mockDevices);
 });
 
 // ===================================================================================
 // SERVIDOR DE ARCHIVOS ESTÁTICOS (FRONTEND)
-// (Debe ir DESPUÉS de las rutas de API)
 // ===================================================================================
-
-// CRÍTICO: Servir el frontend desde la carpeta 'www'
 app.use(express.static(path.join(__dirname, 'www')));
 
 // ===================================================================================
-// LÓGICA DE INICIO DEL SERVIDOR (CRÍTICO PARA RAILWAY)
+// LÓGICA DE INICIO DEL SERVIDOR
 // ===================================================================================
-
 const PORT = process.env.PORT || 8080;
 
 const initializeApplicationServices = async () => {

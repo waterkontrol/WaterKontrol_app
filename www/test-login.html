@@ -24,8 +24,8 @@
           body: JSON.stringify({ correo, clave })
         });
 
-        const text = await res.text(); // ← leemos como texto primero
-        result.textContent = `Status: ${res.status}\nRespuesta:\n${text}`;
+        const data = await res.json();
+        result.textContent = `Status: ${res.status}\nRespuesta:\n${JSON.stringify(data, null, 2)}`;
       } catch (err) {
         result.textContent = '❌ Error de red: ' + err.message;
       }

@@ -1,6 +1,5 @@
 // Cargar las variables de entorno desde el archivo .env
 require('dotenv').config();
-
 // Importar las librerías necesarias
 const express = require('express');
 const { Pool } = require('pg');
@@ -9,14 +8,15 @@ const path = require('path');
 const bcrypt = require('bcrypt'); 
 const crypto = require('crypto'); 
 const nodemailer = require('nodemailer'); 
-const cookieParser = require('cookie-parser'); 
+const cookieParser = require('cookie-parser');
 const saltRounds = 10; 
 
 // --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
+// MIDDLEWARE PRINCIPAL (Debe ir primero para parsear body/cookies)
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true })); 
-app.use(cookieParser()); 
+app.use(cookieParser());
 
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
@@ -25,7 +25,6 @@ console.log('🔧 Intentando conectar a la base de datos...');
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
 console.log('📋 DATABASE_URL:', process.env.DATABASE_URL ? '✅ Definida' : '❌ NO DEFINIDA');
 console.log(`📋 Entorno: ${isProduction ? 'Producción (SSL ON)' : 'Local (SSL OFF)'}`);
-
 const poolConfig = {
   connectionString: process.env.DATABASE_URL, 
   ssl: isProduction ? { rejectUnauthorized: false } : false, 
@@ -33,7 +32,6 @@ const poolConfig = {
   idleTimeoutMillis: 30000,
   max: 10
 };
-
 const pool = new Pool(poolConfig);
 
 const testDatabaseConnection = async () => {
@@ -56,22 +54,22 @@ const testDatabaseConnection = async () => {
     }
   }
 };
-
 const initializeDatabase = async (client) => {
+    // Verificar que la tabla 'usuario' exista con los campos mínimos
     const checkUserTable = await client.query(`
         SELECT column_name
         FROM information_schema.columns
         WHERE table_name='usuario' AND column_name IN ('correo', 'clave', 'token_verificacion', 'estatus')
     `);
-    
     const requiredColumns = ['correo', 'clave', 'token_verificacion', 'estatus'];
     const foundColumns = checkUserTable.rows.map(row => row.column_name);
-    
     if (requiredColumns.every(col => foundColumns.includes(col))) {
         console.log(`✅ Tabla "usuario" verificada. Usando campos: ${foundColumns.join(', ')}.`);
     } else {
         console.warn('⚠️ La tabla "usuario" puede necesitar ser creada o revisada.');
     }
+
+    // Nota: La creación de la tabla telemetria debería ser similar
 }
 
 
@@ -102,26 +100,29 @@ const verifyToken = async (token) => {
         if (client) client.release();
     }
 };
-
 const authenticateToken = (req, res, next) => {
     const token = req.cookies.session_token;
     
     // Si la ruta es estática o de autenticación, la dejamos pasar.
-    if (req.path.startsWith('/auth') || req.path === '/' || req.path.endsWith('.html') || req.path.endsWith('.css')) {
+    // (Esta lógica protege /app.html específicamente)
+    if (req.path.startsWith('/auth') || req.path === '/' || req.path.endsWith('.css') || req.path.endsWith('.js') || req.path === '/register.html' || req.path === '/forgot.html') {
         return next();
     }
 
-    // Lógica para proteger /app.html
-    if (req.path.includes('/app.html')) {
+    // Lógica para proteger /app.html y las rutas de API protegidas
+    if (req.path.includes('/app.html') || req.path === '/dispositivos' || req.path === '/dispositivo' || req.path === '/auth/logout') {
         if (!token) {
+            // Si es una ruta de API, devolvemos JSON
+            if (req.path !== '/app.html') {
+                return res.status(401).json({ message: 'No autorizado' });
+            }
+            // Si es la página, redirigimos al login
             return res.redirect('/');
         }
     }
     
     return next(); 
 };
-
-
 // ===================================================================================
 // LÓGICA DE CORREO ELECTRÓNICO
 // ===================================================================================
@@ -133,7 +134,6 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASS
     }
 });
-
 const sendVerificationEmail = async (correo, token) => {
     const verificationUrl = `${process.env.APP_BASE_URL}/auth/verify?token=${token}`;
     const mailOptions = {
@@ -147,7 +147,6 @@ const sendVerificationEmail = async (correo, token) => {
             <p>Si no solicitaste este registro, por favor ignora este correo.</p>
         `
     };
-
     try {
         await transporter.sendMail(mailOptions);
         console.log(`✅ Correo de verificación enviado a: ${correo}`);
@@ -163,7 +162,6 @@ const sendVerificationEmail = async (correo, token) => {
 // LÓGICA MQTT
 // ===================================================================================
 let mqttClient = null;
-
 const procesarMensajesMqtt = () => {
   const brokerUrl = process.env.MQTT_BROKER_URL;
   if (!brokerUrl) {
@@ -185,7 +183,6 @@ const procesarMensajesMqtt = () => {
       }
     });
   });
-
   client.on('message', async (topic, message) => {
     let dbClient;
     try {
@@ -200,6 +197,7 @@ const procesarMensajesMqtt = () => {
         VALUES ($1, $2, NOW())
         RETURNING id;
       `;
+      // Asumiendo que data.nivel existe
       const result = await dbClient.query(insertQuery, [topic, data.nivel]);
       const msg_id = result.rows[0].id;
       
@@ -210,6 +208,7 @@ const procesarMensajesMqtt = () => {
       if (dbClient) {
         await dbClient.query('ROLLBACK');
       }
+      
       console.error(`❌ Error procesando mensaje del topic [${topic}]:`, error.message);
     } finally {
       if (dbClient) {
@@ -225,43 +224,21 @@ const procesarMensajesMqtt = () => {
 
 
 // ===================================================================================
-// RUTAS ESTÁTICAS Y MIDDLEWARE DE AUTENTICACIÓN
+// RUTAS DE LA API (ENDPOINT) - ¡DEBEN IR ANTES DE APP.STATIC!
 // ===================================================================================
 
-app.use(authenticateToken); 
-app.use(express.static(path.join(__dirname, 'www')));
-app.use(express.static(path.join(__dirname, 'public')));
-
-
-// ===================================================================================
-// RUTAS DE LA API (ENDPOINT)
-// ===================================================================================
-
+// -----------------------------------------------------------------------------------
+// RUTAS DE API PÚBLICAS (No requieren token)
+// -----------------------------------------------------------------------------------
 app.get('/health', (req, res) => {
     res.status(200).send({ status: 'OK', service: 'waterkontrol-backend' });
 });
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'www', 'index.html'));
-});
-
-app.get('/app.html', (req, res) => {
-    if (!req.cookies.session_token) {
-        return res.redirect('/');
-    }
-    res.sendFile(path.join(__dirname, 'www', 'app.html'));
-});
-
-// -----------------------------------------------------------------------------------
-// RUTAS DE AUTENTICACIÓN
-// -----------------------------------------------------------------------------------
 
 app.post('/auth/register', async (req, res) => {
     const { nombre, correo, clave } = req.body;
     let client;
 
     if (!nombre || !correo || !clave) {
-        // CORRECCIÓN: Devolver JSON en caso de error
         return res.status(400).json({ message: 'Faltan campos obligatorios.' });
     }
     
@@ -270,7 +247,6 @@ app.post('/auth/register', async (req, res) => {
         
         const existingUser = await client.query('SELECT * FROM usuario WHERE correo = $1', [correo]);
         if (existingUser.rows.length > 0) {
-            // CORRECCIÓN: Devolver JSON en caso de error
             return res.status(409).json({ message: 'El correo ya está registrado.' });
         }
 
@@ -281,18 +257,14 @@ app.post('/auth/register', async (req, res) => {
             'INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) VALUES ($1, $2, $3, $4, $5)',
             [nombre, correo, hashedClave, verificationToken, 'PENDIENTE']
         );
-
         sendVerificationEmail(correo, verificationToken); 
         
-        // Respuesta exitosa: siempre JSON
         res.status(201).json({ 
             message: 'Registro exitoso. Revisa tu correo para verificar la cuenta.',
             verification_sent: true
         });
-
     } catch (error) {
         console.error('Error al registrar usuario:', error);
-        // CORRECCIÓN: Devolver JSON en caso de error
         res.status(500).json({ message: 'Error interno del servidor al registrar.' });
     } finally {
         if (client) client.release();
@@ -308,9 +280,9 @@ app.get('/auth/verify', async (req, res) => {
     const { success, message } = await verifyToken(token);
     
     if (success) {
+        // Redirigir al login (que es /) con un mensaje de éxito
         res.redirect('/?message=✅ Cuenta verificada. Puedes iniciar sesión.');
     } else {
-        // En este caso mantenemos send() porque es una ruta de redirección que el navegador maneja directamente
         res.status(400).send(`❌ Error de Verificación: ${message}`);
     }
 });
@@ -324,15 +296,13 @@ app.post('/auth/login', async (req, res) => {
         const userResult = await client.query('SELECT * FROM usuario WHERE correo = $1', [correo]);
         
         if (userResult.rows.length === 0) {
-            // CORRECCIÓN: Devolver JSON en caso de error
             return res.status(401).json({ message: 'Credenciales inválidas.' });
         }
 
         const user = userResult.rows[0];
         
-        // 1. Verificar estatus
+        // 1. Verificar estatus (CRÍTICO: JSON para el frontend)
         if (user.estatus !== 'ACTIVO') {
-            // CRÍTICO - ERROR 403: Devolver JSON en caso de error
             return res.status(403).json({ 
                 message: 'Cuenta pendiente de verificación. Revisa tu correo.',
                 error_code: 'ACCOUNT_PENDING'
@@ -343,59 +313,91 @@ app.post('/auth/login', async (req, res) => {
         const isMatch = await bcrypt.compare(clave, user.clave);
 
         if (!isMatch) {
-            // CORRECCIÓN: Devolver JSON en caso de error
             return res.status(401).json({ message: 'Credenciales inválidas.' });
         }
 
         // 3. Crear Token de Sesión
-        const sessionToken = crypto.randomBytes(64).toString('hex'); 
+        const sessionToken = crypto.randomBytes(64).toString('hex');
 
         // 4. Establecer la cookie de sesión
         res.cookie('session_token', sessionToken, { 
             httpOnly: true, 
             secure: isProduction, 
-            maxAge: 7 * 24 * 60 * 60 * 1000, 
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
             sameSite: 'Lax' 
         });
-        
+
         // 5. Respuesta exitosa
         res.status(200).json({ 
             message: 'Inicio de sesión exitoso.', 
             redirect: '/app.html' 
         });
-
     } catch (error) {
         console.error('Error en el login:', error);
-        // CORRECCIÓN: Devolver JSON en caso de error
         res.status(500).json({ message: 'Error interno del servidor.' });
     } finally {
         if (client) client.release();
     }
 });
 
+
+// ===================================================================================
+// MIDDLEWARE DE AUTENTICACIÓN
+// (Se aplica a todo lo que esté definido DESPUÉS de él)
+// ===================================================================================
+app.use(authenticateToken);
+
+
+// ===================================================================================
+// RUTAS DE API PROTEGIDAS (Requieren token)
+// ===================================================================================
+
 app.post('/auth/logout', (req, res) => {
     res.clearCookie('session_token');
-    // CORRECCIÓN: Devolver JSON para la app
     res.status(200).json({ message: 'Sesión cerrada.' }); 
 });
 
 app.post('/dispositivo', async (req, res) => {
     const { usr_id, dsp_id, topic, tipo, marca } = req.body;
     
+    // NOTA: Aquí se debería implementar la lógica de guardado en la tabla 'dispositivo'
     console.log(`📌 Dispositivo ${dsp_id} intentando registrarse con topic ${topic}.`);
     res.status(200).json({ message: 'Registro de dispositivo recibido (Lógica pendiente de implementar).', dsp_id });
 });
 
+// Ruta de ejemplo para obtener dispositivos (Mock/Estatica)
+app.get('/dispositivos', (req, res) => {
+    // NOTA: Esta ruta debería consultar la tabla 'dispositivo' filtrada por el usuario logueado.
+    const mockDevices = [
+        { id: 1, nombre: 'Tanque Principal', tipo: 'Nivel', marca: 'WaterKontrol', topic: 'dispositivos/tk-001/telemetria', estatus: 'ACTIVO' },
+        { id: 2, nombre: 'Pozo de Bombeo', tipo: 'Bomba', marca: 'WK-Pro', topic: 'dispositivos/pozo-002/telemetria', estatus: 'INACTIVO' }
+    ];
+    res.json(mockDevices);
+});
+
 
 // ===================================================================================
-// LÓGICA DE INICIO DEL SERVIDOR (FIX CRÍTICO PARA RAILWAY)
+// SERVIDOR DE ARCHIVOS ESTÁTICOS (FRONTEND)
+// (Debe ir DESPUÉS de las rutas de API)
 // ===================================================================================
 
-const PORT = process.env.PORT || 8080; 
+// CRÍTICO: Servir el frontend desde la carpeta 'www'
+app.use(express.static(path.join(__dirname, 'www')));
 
+// Las rutas GET para / (index.html) y /app.html son manejadas por
+// 'authenticateToken' y 'express.static' automáticamente.
+// 'express.static' servirá index.html para '/'
+// 'authenticateToken' protegerá '/app.html' antes de que 'express.static' lo sirva.
+// Ya no necesitamos app.get('/') o app.get('/app.html')
+
+
+// ===================================================================================
+// LÓGICA DE INICIO DEL SERVIDOR (CRÍTICO PARA RAILWAY)
+// ===================================================================================
+
+const PORT = process.env.PORT || 8080;
 const initializeApplicationServices = async () => {
     console.log('🔍 Iniciando verificación de base de datos y MQTT (en segundo plano)...');
-    
     const dbConnected = await testDatabaseConnection();
     
     if (!dbConnected) {
@@ -412,7 +414,6 @@ const initializeApplicationServices = async () => {
 
 const startServer = () => {
     console.log('🚀 Iniciando servidor Express...');
-    
     const host = isProduction ? '0.0.0.0' : 'localhost';
 
     // 1. Iniciar Express inmediatamente para que el healthcheck responda

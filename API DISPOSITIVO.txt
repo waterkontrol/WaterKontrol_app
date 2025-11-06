@@ -1,0 +1,1291 @@
+¡Absolutamente\! Aquí tienes la documentación completa de tu proyecto, incluyendo la estructura, los archivos con todo su código, la configuración del *deploy* en Railway y los comandos necesarios.
+
+-----
+
+## 📄 DOCUMENTACIÓN COMPLETA DEL PROYECTO WATERKONTROL
+
+### 1\. ESTRUCTURA DE ARCHIVOS Y CARPETAS
+
+Tu proyecto utiliza una estructura **Monorepo Híbrido** donde el *backend* de Node.js y el *frontend* web/móvil conviven.
+
+```
+/api_dispositivos
+├── android/                   # Carpeta nativa de Android (generada por Capacitor)
+├── node_modules/              # Dependencias (ignorada por Git)
+├── public/                    # CÓDIGO FUENTE del Frontend (HTML, CSS, JS)
+│   ├── app.html
+│   ├── index.html             # Página de Login
+│   ├── register.html          # Página de Registro
+│   ├── forgot.html            # Página de Recuperación (sin lógica de backend)
+│   ├── style.css
+│   ├── add_device.html        # Página para configurar el dispositivo
+│   └── add_device_config.js   # Lógica de configuración del dispositivo
+├── www/                       # DESTINO del Build (copia de public, usado por Capacitor y Express)
+├── .env                       # Variables de entorno (ignorada por Git)
+├── .gitignore
+├── capacitor.config.json
+├── index.js                   # BACKEND PRINCIPAL (Node.js/Express)
+└── package.json
+```
+
+-----
+
+### 2\. RESUMEN DE FUNCIONAMIENTO EN RAILWAY Y BASE DE DATOS
+
+#### A. Flujo de Despliegue (Railway)
+
+1.  **Conexión a DB:** Railway debe tener una base de datos PostgreSQL enlazada. Esta conexión se proporciona automáticamente a tu código a través de la variable de entorno **`DATABASE_URL`**.
+2.  **Instalación:** Railway ejecuta `npm ci`.
+3.  **Copia del Frontend:** Railway ejecuta el *script* **`postinstall`** (`mkdir -p www && cp -R public/. www`) para copiar los archivos de `public/` a `www/` con comandos compatibles con Linux.
+4.  **Ejecución:** Railway ejecuta **`npm start`**, que llama a `node index.js`.
+5.  **Servidor Express (`index.js`):**
+      * Se conecta a la DB usando `process.env.DATABASE_URL`.
+      * Inicia el servidor en `0.0.0.0:8080` (o el puerto que asigne Railway).
+      * Sirve los archivos del *frontend* desde la carpeta **`www/`**.
+      * Inicia la conexión **MQTT** para escuchar telemetría en segundo plano.
+
+#### B. Flujo de Datos (DB y MQTT)
+
+  * **Base de Datos (PostgreSQL):** Se asume que tienes las siguientes tablas:
+      * **`usuario`**: Almacena `nombre`, `correo`, `clave` (hasheada con bcrypt), `token_verificacion` y `estatus` (`PENDIENTE` o `ACTIVO`).
+      * **`telemetria`**: Almacena los datos recibidos de los dispositivos, como `topic`, `nivel` y `fecha`.
+  * **MQTT:** El servidor Node.js se suscribe al *topic* `dispositivos/+/telemetria`. Cuando un dispositivo WaterKontrol (ej: ESP32) envía datos a ese *topic*, el *backend* los recibe y los guarda en la tabla **`telemetria`** de la base de datos.
+
+-----
+
+### 3\. COMANDOS CLAVE
+
+| Comando | Dónde se usa | Propósito |
+| :--- | :--- | :--- |
+| **`npm install --save-dev rimraf`** | Local (Windows) | Instalar la herramienta necesaria para que los *scripts* de *build* local funcionen en Windows. |
+| **`npm run cap:android`** | Local (Windows) | El comando todo-en-uno para el desarrollo móvil: 1) Construye el *frontend* (`build:local`), 2) Sincroniza a Android Studio (`cap sync`), 3) Abre Android Studio (`cap open android`). |
+| **`git push railway master`** | Local (Windows/Linux) | Sube el código al repositorio de Railway para iniciar un nuevo *deploy*. |
+
+-----
+
+### 4\. CÓDIGO FUENTE COMPLETO (.txt)
+
+A continuación se muestra el contenido consolidado de todos los archivos del proyecto.
+
+```txt
+===================================================================
+ARCHIVO: .gitignore
+===================================================================
+# Dependencias
+/node_modules
+
+# Variables de entorno
+.env
+
+# Carpetas de Apps Nativas
+/android
+/ios
+
+# Build de Frontend
+/www
+
+
+===================================================================
+ARCHIVO: capacitor.config.json
+===================================================================
+{
+  "appId": "com.waterkontrol.app",
+  "appName": "WaterKontrolApp",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
+
+===================================================================
+ARCHIVO: .env (Ejemplo - DEBE SER REEMPLAZADO CON VALORES REALES)
+===================================================================
+# Configuracion de la Base de Datos PostgreSQL (LOCAL)
+DB_USER=postgres
+DB_HOST=localhost
+DB_DATABASE=dispositivos_db
+DB_PASSWORD=22021655
+DB_PORT=5432
+
+# URL de Conexión Completa para pruebas locales
+DATABASE_URL=postgresql://postgres:22021655@localhost:5432/dispositivos_db
+
+# Configuracion del Broker MQTT (usamos uno publico para pruebas)
+MQTT_BROKER_URL=mqtt://broker.emqx.io/
+
+# ===============================================
+# VARIABLES PARA EL ENVÍO DE CORREOS
+# ===============================================
+EMAIL_USER=Waterkontrol.info@gmail.com                               
+# CLAVE DE APLICACIÓN DE GMAIL (NO TU CONTRASEÑA NORMAL)
+EMAIL_PASS=ptvn vpgi gltf atlg                                      
+# URL DE PRODUCCIÓN DE RAILWAY (CRÍTICO PARA ENLACES DE VERIFICACIÓN)
+APP_BASE_URL=https://waterkontrolapp-production.up.railway.app 
+
+
+===================================================================
+ARCHIVO: package.json (VERSIÓN FINAL CORREGIDA)
+===================================================================
+{
+  "name": "waterkontrol_app",
+  "version": "1.0.0",
+  "description": "Backend y Frontend para WaterKontrol (App Híbrida)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "mkdir -p www && cp -R public/. www", 
+    "build:local": "rimraf www && mkdir www && xcopy public www /E /I /Y", 
+    "cap:sync": "npm run build:local && npx cap sync",
+    "cap:android": "npm run cap:sync && npx cap open android"
+  },
+  "keywords": [
+    "node",
+    "express",
+    "capacitor",
+    "android"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "mqtt": "^5.14.1",
+    "nodemailer": "^6.10.1",
+    "path": "^0.12.7",
+    "pg": "^8.16.3",
+    "cordova-plugin-hotspot": "1.2.9" 
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.0",
+    "tslib": "^2.6.3",
+    "@capacitor/cli": "6.2.1",
+    "@capacitor/android": "6.2.1",
+    "@capacitor/core": "6.2.1"
+  }
+}
+
+
+===================================================================
+ARCHIVO: index.js (VERSIÓN FINAL CON CORRECCIONES)
+===================================================================
+// Cargar las variables de entorno desde el archivo .env
+require('dotenv').config();
+
+// Importar las librerías necesarias
+const express = require('express');
+const { Pool } = require('pg');
+const mqtt = require('mqtt');
+const path = require('path'); 
+const bcrypt = require('bcrypt'); 
+const crypto = require('crypto'); 
+const nodemailer = require('nodemailer'); 
+const cookieParser = require('cookie-parser'); 
+const saltRounds = 10; 
+
+// --- CONFIGURACIÓN DE EXPRESS ---
+const app = express();
+app.use(express.json()); 
+app.use(express.urlencoded({ extended: true })); 
+app.use(cookieParser()); 
+
+// ===================================================================================
+// LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
+// ===================================================================================
+console.log('🔧 Intentando conectar a la base de datos...');
+const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
+console.log('📋 DATABASE_URL:', process.env.DATABASE_URL ? '✅ Definida' : '❌ NO DEFINIDA');
+console.log(`📋 Entorno: ${isProduction ? 'Producción (SSL ON)' : 'Local (SSL OFF)'}`);
+
+const poolConfig = {
+  connectionString: process.env.DATABASE_URL, 
+  ssl: isProduction ? { rejectUnauthorized: false } : false, 
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  max: 10
+};
+
+const pool = new Pool(poolConfig);
+
+const testDatabaseConnection = async () => {
+  let client;
+  try {
+    client = await pool.connect();
+    console.log('✅ Conexión a la base de datos establecida correctamente');
+    const result = await client.query('SELECT 1 as db_connection_ok');
+    if (result.rows[0].db_connection_ok === 1) {
+        console.log('✅ db connection ok');
+    }
+    await initializeDatabase(client);
+    return true;
+  } catch (error) {
+    console.error('❌ Error crítico al conectar/verificar la DB:', error.message);
+    return false;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+const initializeDatabase = async (client) => {
+    // Verificar que la tabla 'usuario' exista con los campos mínimos
+    const checkUserTable = await client.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name='usuario' AND column_name IN ('correo', 'clave', 'token_verificacion', 'estatus')
+    `);
+    
+    const requiredColumns = ['correo', 'clave', 'token_verificacion', 'estatus'];
+    const foundColumns = checkUserTable.rows.map(row => row.column_name);
+    
+    if (requiredColumns.every(col => foundColumns.includes(col))) {
+        console.log(`✅ Tabla "usuario" verificada. Usando campos: ${foundColumns.join(', ')}.`);
+    } else {
+        console.warn('⚠️ La tabla "usuario" puede necesitar ser creada o revisada.');
+    }
+
+    // Nota: La creación de la tabla telemetria debería ser similar
+}
+
+
+// ===================================================================================
+// LÓGICA DE AUTENTICACIÓN
+// ===================================================================================
+
+const verifyToken = async (token) => {
+    let client;
+    try {
+        client = await pool.connect();
+        const result = await client.query(
+            'SELECT correo FROM usuario WHERE token_verificacion = $1 AND estatus = $2',
+            [token, 'PENDIENTE']
+        );
+        if (result.rows.length === 1) {
+            await client.query(
+                'UPDATE usuario SET estatus = $1, token_verificacion = NULL WHERE correo = $2',
+                ['ACTIVO', result.rows[0].correo]
+            );
+            return { success: true };
+        }
+        return { success: false, message: 'Token de verificación inválido o ya usado.' };
+    } catch (error) {
+        console.error('Error en verifyToken:', error);
+        return { success: false, message: 'Error interno del servidor.' };
+    } finally {
+        if (client) client.release();
+    }
+};
+
+const authenticateToken = (req, res, next) => {
+    const token = req.cookies.session_token;
+    
+    // Si la ruta es estática o de autenticación, la dejamos pasar.
+    if (req.path.startsWith('/auth') || req.path === '/' || req.path.endsWith('.html') || req.path.endsWith('.css')) {
+        return next();
+    }
+
+    // Lógica para proteger /app.html
+    if (req.path.includes('/app.html')) {
+        if (!token) {
+            return res.redirect('/');
+        }
+    }
+    
+    return next(); 
+};
+
+
+// ===================================================================================
+// LÓGICA DE CORREO ELECTRÓNICO
+// ===================================================================================
+
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+const sendVerificationEmail = async (correo, token) => {
+    const verificationUrl = `${process.env.APP_BASE_URL}/auth/verify?token=${token}`;
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: correo,
+        subject: 'Verificación de Cuenta WaterKontrol',
+        html: `
+            <h1>Verificación de Correo</h1>
+            <p>Gracias por registrarte en WaterKontrol. Por favor, haz clic en el siguiente enlace para verificar tu cuenta:</p>
+            <a href="${verificationUrl}">${verificationUrl}</a>
+            <p>Si no solicitaste este registro, por favor ignora este correo.</p>
+        `
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ Correo de verificación enviado a: ${correo}`);
+        return true;
+    } catch (error) {
+        console.error('❌ Error al enviar correo de verificación:', error);
+        return false;
+    }
+};
+
+
+// ===================================================================================
+// LÓGICA MQTT
+// ===================================================================================
+let mqttClient = null;
+
+const procesarMensajesMqtt = () => {
+  const brokerUrl = process.env.MQTT_BROKER_URL;
+  if (!brokerUrl) {
+    console.error('❌ MQTT_BROKER_URL no está definido. Saltando la conexión MQTT.');
+    return;
+  }
+
+  const client = mqtt.connect(brokerUrl);
+  mqttClient = client;
+
+  client.on('connect', () => {
+    console.log('✅ Conectado al broker MQTT.');
+    const topic = 'dispositivos/+/telemetria';
+    client.subscribe(topic, (err) => {
+      if (!err) {
+        console.log(`✅ Suscrito exitosamente al topic: ${topic}`);
+      } else {
+        console.error(`❌ Error al suscribirse al topic ${topic}:`, err);
+      }
+    });
+  });
+
+  client.on('message', async (topic, message) => {
+    let dbClient;
+    try {
+      const data = JSON.parse(message.toString());
+      console.log(`[${new Date().toISOString()}] Mensaje de MQTT en [${topic}]:`, data);
+
+      dbClient = await pool.connect();
+      await dbClient.query('BEGIN'); 
+
+      const insertQuery = `
+        INSERT INTO telemetria (topic, nivel, fecha)
+        VALUES ($1, $2, NOW())
+        RETURNING id;
+      `;
+      // Asumiendo que data.nivel existe
+      const result = await dbClient.query(insertQuery, [topic, data.nivel]);
+      const msg_id = result.rows[0].id;
+      
+      await dbClient.query('COMMIT'); 
+      console.log(`✅ Mensaje del topic [${topic}] procesado y guardado con éxito (MSG_ID: ${msg_id}).`);
+
+    } catch (error) {
+      if (dbClient) {
+        await dbClient.query('ROLLBACK');
+      }
+      console.error(`❌ Error procesando mensaje del topic [${topic}]:`, error.message);
+    } finally {
+      if (dbClient) {
+        dbClient.release();
+      }
+    }
+  });
+
+  client.on('error', (error) => {
+    console.error('❌ Error en la conexión MQTT:', error);
+  });
+};
+
+
+// ===================================================================================
+// RUTAS ESTÁTICAS Y MIDDLEWARE DE AUTENTICACIÓN
+// ===================================================================================
+
+app.use(authenticateToken); 
+// CRÍTICO: Servir el frontend desde la carpeta 'www' (donde lo copia el postinstall)
+app.use(express.static(path.join(__dirname, 'www')));
+
+
+// ===================================================================================
+// RUTAS DE LA API (ENDPOINT)
+// ===================================================================================
+
+app.get('/health', (req, res) => {
+    res.status(200).send({ status: 'OK', service: 'waterkontrol-backend' });
+});
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'www', 'index.html'));
+});
+
+app.get('/app.html', (req, res) => {
+    if (!req.cookies.session_token) {
+        return res.redirect('/');
+    }
+    res.sendFile(path.join(__dirname, 'www', 'app.html'));
+});
+
+// -----------------------------------------------------------------------------------
+// RUTAS DE AUTENTICACIÓN
+// -----------------------------------------------------------------------------------
+
+app.post('/auth/register', async (req, res) => {
+    const { nombre, correo, clave } = req.body;
+    let client;
+
+    if (!nombre || !correo || !clave) {
+        return res.status(400).json({ message: 'Faltan campos obligatorios.' });
+    }
+    
+    try {
+        client = await pool.connect();
+        
+        const existingUser = await client.query('SELECT * FROM usuario WHERE correo = $1', [correo]);
+        if (existingUser.rows.length > 0) {
+            return res.status(409).json({ message: 'El correo ya está registrado.' });
+        }
+
+        const hashedClave = await bcrypt.hash(clave, saltRounds);
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+
+        await client.query(
+            'INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) VALUES ($1, $2, $3, $4, $5)',
+            [nombre, correo, hashedClave, verificationToken, 'PENDIENTE']
+        );
+
+        sendVerificationEmail(correo, verificationToken); 
+        
+        res.status(201).json({ 
+            message: 'Registro exitoso. Revisa tu correo para verificar la cuenta.',
+            verification_sent: true
+        });
+
+    } catch (error) {
+        console.error('Error al registrar usuario:', error);
+        res.status(500).json({ message: 'Error interno del servidor al registrar.' });
+    } finally {
+        if (client) client.release();
+    }
+});
+
+app.get('/auth/verify', async (req, res) => {
+    const { token } = req.query;
+    if (!token) {
+        return res.status(400).send('Token de verificación no proporcionado.');
+    }
+
+    const { success, message } = await verifyToken(token);
+    
+    if (success) {
+        res.redirect('/?message=✅ Cuenta verificada. Puedes iniciar sesión.');
+    } else {
+        res.status(400).send(`❌ Error de Verificación: ${message}`);
+    }
+});
+
+app.post('/auth/login', async (req, res) => {
+    const { correo, clave } = req.body;
+    let client;
+    
+    try {
+        client = await pool.connect();
+        const userResult = await client.query('SELECT * FROM usuario WHERE correo = $1', [correo]);
+        
+        if (userResult.rows.length === 0) {
+            return res.status(401).json({ message: 'Credenciales inválidas.' });
+        }
+
+        const user = userResult.rows[0];
+        
+        // 1. Verificar estatus (CRÍTICO: JSON para el frontend)
+        if (user.estatus !== 'ACTIVO') {
+            return res.status(403).json({ 
+                message: 'Cuenta pendiente de verificación. Revisa tu correo.',
+                error_code: 'ACCOUNT_PENDING'
+            });
+        }
+
+        // 2. Comparar contraseña
+        const isMatch = await bcrypt.compare(clave, user.clave);
+
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Credenciales inválidas.' });
+        }
+
+        // 3. Crear Token de Sesión
+        const sessionToken = crypto.randomBytes(64).toString('hex'); 
+
+        // 4. Establecer la cookie de sesión
+        res.cookie('session_token', sessionToken, { 
+            httpOnly: true, 
+            secure: isProduction, 
+            maxAge: 7 * 24 * 60 * 60 * 1000, 
+            sameSite: 'Lax' 
+        });
+        
+        // 5. Respuesta exitosa
+        res.status(200).json({ 
+            message: 'Inicio de sesión exitoso.', 
+            redirect: '/app.html' 
+        });
+
+    } catch (error) {
+        console.error('Error en el login:', error);
+        res.status(500).json({ message: 'Error interno del servidor.' });
+    } finally {
+        if (client) client.release();
+    }
+});
+
+app.post('/auth/logout', (req, res) => {
+    res.clearCookie('session_token');
+    res.status(200).json({ message: 'Sesión cerrada.' }); 
+});
+
+
+// -----------------------------------------------------------------------------------
+// RUTAS DE DISPOSITIVOS Y TELEMETRÍA (LÓGICA PARCIAL/DE PRUEBA)
+// -----------------------------------------------------------------------------------
+app.post('/dispositivo', async (req, res) => {
+    const { usr_id, dsp_id, topic, tipo, marca } = req.body;
+    
+    // NOTA: Aquí se debería implementar la lógica de guardado en la tabla 'dispositivo'
+    console.log(`📌 Dispositivo ${dsp_id} intentando registrarse con topic ${topic}.`);
+    res.status(200).json({ message: 'Registro de dispositivo recibido (Lógica pendiente de implementar).', dsp_id });
+});
+
+// Ruta de ejemplo para obtener dispositivos (Mock/Estatica)
+app.get('/dispositivos', (req, res) => {
+    // NOTA: Esta ruta debería consultar la tabla 'dispositivo' filtrada por el usuario logueado.
+    const mockDevices = [
+        { id: 1, nombre: 'Tanque Principal', tipo: 'Nivel', marca: 'WaterKontrol', topic: 'dispositivos/tk-001/telemetria', estatus: 'ACTIVO' },
+        { id: 2, nombre: 'Pozo de Bombeo', tipo: 'Bomba', marca: 'WK-Pro', topic: 'dispositivos/pozo-002/telemetria', estatus: 'INACTIVO' }
+    ];
+    res.json(mockDevices);
+});
+
+
+// ===================================================================================
+// LÓGICA DE INICIO DEL SERVIDOR (CRÍTICO PARA RAILWAY)
+// ===================================================================================
+
+const PORT = process.env.PORT || 8080; 
+
+const initializeApplicationServices = async () => {
+    console.log('🔍 Iniciando verificación de base de datos y MQTT (en segundo plano)...');
+    
+    const dbConnected = await testDatabaseConnection();
+    
+    if (!dbConnected) {
+        console.error('❌ No se pudo conectar a la base de datos. Las funciones de autenticación y DB fallarán.');
+    } else {
+        try {
+            // Iniciar MQTT solo si la conexión a BD fue exitosa
+            procesarMensajesMqtt();
+        } catch (error) {
+            console.error('❌ Error iniciando MQTT:', error);
+        }
+    }
+};
+
+const startServer = () => {
+    console.log('🚀 Iniciando servidor Express...');
+    
+    const host = isProduction ? '0.0.0.0' : 'localhost';
+
+    // 1. Iniciar Express inmediatamente para que el healthcheck responda
+    app.listen(PORT, host, () => {
+        console.log(`✅ Servidor Express ejecutándose en ${host}:${PORT}`);
+        console.log(`✅ Healthcheck disponible en /health`);
+        
+        // 2. Ejecutar la lógica pesada (DB y MQTT) DESPUÉS de que el servidor esté activo
+        initializeApplicationServices(); 
+    });
+};
+
+startServer();
+
+
+===================================================================
+ARCHIVO: public/index.html
+===================================================================
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - WaterKontrol</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <h1>Iniciar Sesión</h1>
+        <form id="loginForm">
+            <input type="email" name="correo" placeholder="Correo Electrónico" required>
+            <input type="password" name="clave" placeholder="Contraseña" required>
+            <button type="submit">Entrar</button>
+            <p id="message" style="color: red; margin-top: 15px;"></p>
+            <div class="links">
+                <a href="/register.html">Regístrate aquí</a>
+                <a href="/forgot.html">Olvidé mi contraseña</a>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const messageElement = document.getElementById('message');
+            
+            // Mostrar mensaje de carga
+            messageElement.textContent = 'Iniciando sesión...';
+            messageElement.style.color = 'blue';
+
+            // Deshabilitar botón temporalmente para evitar doble envío
+            const submitButton = this.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                // Si la respuesta es exitosa (200 OK)
+                if (response.ok) {
+                    messageElement.textContent = result.message;
+                    messageElement.style.color = 'green';
+                    // El servidor ya estableció la cookie, ahora redirigimos
+                    setTimeout(() => {
+                        window.location.href = result.redirect; 
+                    }, 500); 
+                } else {
+                    // Manejar errores como 401 (Credenciales inválidas) o 403 (No verificado)
+                    messageElement.textContent = result.message || `Error desconocido (Status: ${response.status})`;
+                    messageElement.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('Error de red:', error);
+                messageElement.textContent = 'Error de conexión con el servidor.';
+                messageElement.style.color = 'red';
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+        
+        // Manejar mensaje de verificación exitosa (si viene de /auth/verify)
+        const urlParams = new URLSearchParams(window.location.search);
+        const successMessage = urlParams.get('message');
+        if (successMessage) {
+            const messageElement = document.getElementById('message');
+            messageElement.textContent = successMessage;
+            messageElement.style.color = 'green';
+            // Limpiar la URL para que el mensaje no persista al recargar
+            history.replaceState(null, '', window.location.pathname);
+        }
+    </script>
+</body>
+</html>
+
+
+===================================================================
+ARCHIVO: public/register.html
+===================================================================
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaterKontrol - Registro</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <h2>Crear Cuenta</h2>
+        
+        <form id="registerForm">
+            <label for="nombre">Nombre Completo:</label>
+            <input type="text" id="nombre" name="nombre" required>
+
+            <label for="correo">Correo:</label>
+            <input type="email" id="correo" name="correo" required>
+
+            <label for="clave">Contraseña:</label>
+            <input type="password" id="clave" name="clave" required>
+
+            <button type="submit">Registrarse</button>
+            <p id="message" style="margin-top: 15px;"></p>
+        </form>
+        <div class="links">
+            <a href="/">Ya tengo cuenta (Login)</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const messageElement = document.getElementById('message');
+            
+            // Mostrar mensaje de carga
+            messageElement.textContent = 'Registrando...';
+            messageElement.style.color = 'blue';
+
+            const submitButton = this.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const response = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    messageElement.textContent = result.message;
+                    messageElement.style.color = 'green';
+                    // Opcional: Redirigir al login
+                    setTimeout(() => {
+                        window.location.href = '/'; 
+                    }, 3000); 
+                } else {
+                    messageElement.textContent = result.message || `Error desconocido (Status: ${response.status})`;
+                    messageElement.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('Error de red:', error);
+                messageElement.textContent = 'Error de conexión con el servidor.';
+                messageElement.style.color = 'red';
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+===================================================================
+ARCHIVO: public/forgot.html
+===================================================================
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaterKontrol - Recuperar Contraseña</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <h2>Recuperar Contraseña</h2>
+        <form action="/auth/forgot" method="POST">
+            <label for="correo">Correo:</label>
+            <input type="email" id="correo" name="correo" placeholder="Ingresa tu correo registrado" required>
+
+            <button type="submit">Enviar Enlace de Recuperación</button>
+        </form>
+        <div class="links">
+            <a href="/">Volver al Login</a>
+        </div>
+    </div>
+    </body>
+</html>
+
+
+===================================================================
+ARCHIVO: public/app.html
+===================================================================
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>WaterKontrol - Mis Dispositivos</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+        .device-list-container {
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .device-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 5px solid #007bff;
+        }
+        .device-info h2 {
+            margin-top: 0;
+            margin-bottom: 5px;
+            font-size: 1.2em;
+            color: #343a40;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .device-info p {
+            margin: 0;
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        .device-status {
+            font-weight: bold;
+            font-size: 1em;
+        }
+        #addButton {
+            background-color: #28a745; 
+            margin-right: 10px;
+            width: auto;
+            padding: 8px 15px;
+        }
+        #logoutButton {
+            background-color: #dc3545; 
+            width: auto;
+            padding: 8px 15px;
+        }
+        .buttons-container {
+            display: flex;
+            align-items: center;
+        }
+        #loadingMessage {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>WaterKontrol Dashboard</h1>
+        <div class="buttons-container">
+            <button id="addButton" onclick="window.location.href='/add_device.html';">Añadir Dispositivo</button>
+            <button id="logoutButton">Cerrar Sesión</button>
+        </div>
+    </div>
+    
+    <div class="device-list-container">
+        <h2>Mis Dispositivos Registrados</h2>
+        <p id="loadingMessage">Cargando dispositivos...</p>
+        <div id="deviceList">
+            </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', loadDevices);
+
+        async function loadDevices() {
+            const deviceList = document.getElementById('deviceList');
+            const loadingMessage = document.getElementById('loadingMessage');
+            deviceList.innerHTML = '';
+            loadingMessage.textContent = 'Cargando...';
+
+            try {
+                // Obtener dispositivos desde el backend (ruta de ejemplo)
+                const response = await fetch('/dispositivos'); 
+                
+                if (!response.ok) {
+                    throw new Error('No se pudo obtener la lista de dispositivos.');
+                }
+
+                const devices = await response.json();
+
+                if (devices.length === 0) {
+                    loadingMessage.textContent = 'No tienes dispositivos registrados. Usa el botón "Añadir Dispositivo".';
+                    loadingMessage.style.color = '#007bff';
+                    return;
+                }
+                
+                loadingMessage.style.display = 'none';
+
+                devices.forEach(device => {
+                    // Lógica para determinar el estado visual
+                    const isActive = device.estatus === 'ACTIVO';
+                    const statusText = isActive ? 'ACTIVO' : 'INACTIVO';
+                    const statusColor = isActive ? '#28a745' : '#dc3545'; // Verde o Rojo
+
+                    const card = document.createElement('div');
+                    card.className = 'device-card';
+                    card.style.borderLeftColor = statusColor;
+
+                    card.innerHTML = `
+                        <div class="device-info">
+                            <h2>${device.nombre}</h2>
+                            <p><strong>Tipo:</strong> ${device.tipo} | <strong>Marca:</strong> ${device.marca || 'N/A'}</p>
+                            <p><strong>Topic MQTT:</strong> ${device.topic}</p>
+                        </div>
+                        <div class="device-status" style="color: ${statusColor};">
+                            ${statusText}
+                        </div>
+                    `;
+                    deviceList.appendChild(card);
+                });
+
+            } catch (error) {
+                console.error('Error al cargar dispositivos:', error);
+                loadingMessage.textContent = '❌ Error al cargar los dispositivos. Intente recargar la página.';
+                loadingMessage.style.color = 'red';
+            }
+        }
+
+        // Lógica para el botón de Cerrar Sesión
+        document.getElementById('logoutButton').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/auth/logout', {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    // El servidor ya borró la cookie, solo redirigimos
+                    window.location.href = '/'; 
+                } else {
+                    alert('Error al cerrar la sesión.');
+                }
+            } catch (error) {
+                console.error('Error de red al cerrar sesión:', error);
+            }
+        });
+    </script>
+</body>
+</html>
+
+===================================================================
+ARCHIVO: public/add_device.html
+===================================================================
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Añadir Dispositivo - WaterKontrol</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        /* Estilos específicos para esta página */
+        .header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+        }
+        .header h1 { margin: 0; font-size: 1.5em; }
+        .container {
+            padding: 20px;
+            max-width: 500px;
+            margin: 30px auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .message {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            display: none;
+            font-weight: bold;
+        }
+        .red { color: white; background-color: #dc3545; }
+        .green { color: white; background-color: #28a745; }
+        
+        #wifi-list-container {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        #wifi-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        #wifi-list li {
+            padding: 8px;
+            border-bottom: 1px dotted #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #wifi-list li:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Configurar Dispositivo WaterKontrol</h1>
+        <a href="/app.html" style="color: white; float: left; text-decoration: none;">&lt; Volver</a>
+    </div>
+
+    <div class="container">
+        <h2>Paso 1: Conexión Local</h2>
+        <div class="message" id="messageElement"></div>
+        <p>Conecta tu teléfono/PC a la red Wi-Fi temporal del dispositivo WaterKontrol (ej: "WaterKontrol-AP").</p>
+        
+        <h2>Paso 2: Enviar Credenciales</h2>
+        <form id="config-form">
+            <label for="ssid">SSID de tu Red Wi-Fi Doméstica:</label>
+            <input type="text" id="ssid" name="ssid" required placeholder="Nombre de tu red Wi-Fi (ej: MiCasa)">
+
+            <label for="password">Contraseña de tu Red Wi-Fi Doméstica:</label>
+            <input type="password" id="password" name="password" required placeholder="Contraseña de tu red Wi-Fi">
+
+            <button type="submit" id="submitButton">Enviar Configuración al Dispositivo</button>
+        </form>
+    </div>
+
+    <script src="/add_device_config.js"></script>
+</body>
+</html>
+
+===================================================================
+ARCHIVO: public/add_device_config.js
+===================================================================
+// URL de tu API de Node.js en Railway (Debe ser la URL que usas en el .env)
+const RAILWAY_API_URL = "https://waterkontrolapp-production.up.railway.app"; 
+
+// Asignar listeners
+document.getElementById('config-form').addEventListener('submit', sendCredentialsToDevice);
+
+const messageElement = document.getElementById('messageElement');
+
+// 1. Función para enviar credenciales al dispositivo (Asumiendo que el dispositivo está en modo AP en 192.168.4.1)
+async function sendCredentialsToDevice(e) {
+    e.preventDefault();
+    document.getElementById('submitButton').disabled = true;
+    showMessage("info", "Enviando credenciales al dispositivo...", "blue");
+
+    const ssid = document.getElementById('ssid').value;
+    const password = document.getElementById('password').value;
+
+    try {
+        // A) ENVIAR CONFIGURACIÓN AL DISPOSITIVO ESP32 (Lógica Local, IP Fija)
+        // NOTA: 192.168.4.1 es la IP por defecto de un ESP32/ESP8266 cuando está en modo AP.
+        const response = await fetch('http://192.168.4.1/config', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                wifi_ssid: ssid, 
+                wifi_pass: password, 
+                // Enviar la URL de tu broker MQTT de Railway/Configuración
+                mqtt_broker: RAILWAY_API_URL, // Debería ser el broker MQTT, no la API URL. ¡CORREGIR ESTO!
+                mqtt_topic: 'dispositivos/nuevo/telemetria' 
+            })
+        });
+
+        if (!response.ok) {
+            // Este error se lanza si el ESP32 devuelve un status 4xx/5xx
+            throw new Error(`Error en la configuración local del dispositivo (Status: ${response.status}).`);
+        }
+        
+        // El dispositivo aceptó la configuración, ahora intentará conectarse a la red doméstica y al broker.
+        showMessage("success", 
+            "✅ Configuración enviada. El dispositivo se está conectando a tu Wi-Fi. Ahora, reconecta tu teléfono a tu red Wi-Fi doméstica.", 
+            "green");
+        
+        // B) REGISTRAR EL DISPOSITIVO EN TU API DE RAILWAY (Lógica conceptual)
+        // Esta parte es conceptual y necesitará un ID de dispositivo real devuelto por el ESP32.
+        /*
+        const registerResponse = await fetch(`${RAILWAY_API_URL}/dispositivo`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ 
+                 usr_id: 'OBTENER_DE_SESION', // NECESITA TOKEN/COOKIE DEL USUARIO
+                 dsp_id: 'ID_NUEVO_DISPOSITIVO', // ID REAL DEL ESP32
+                 topic: 'dispositivos/nuevo/telemetria' 
+             })
+        });
+
+        if (registerResponse.ok) {
+             showMessage("success", 
+                "✅ Dispositivo configurado y registrado en la plataforma. Redirigiendo...", 
+                "green");
+        } else {
+             showMessage("warning", 
+                "⚠️ Configurado localmente, pero falló el registro en la plataforma.", 
+                "orange");
+        }
+        */
+
+        // Opcional: Redirigir después de unos segundos
+        setTimeout(() => {
+            window.location.href = '/app.html';
+        }, 8000); 
+
+    } catch (error) {
+        // Este error es muy común si la IP no es accesible (no conectado al AP del dispositivo)
+        showMessage("error", 
+            `❌ Error de conexión: ${error.message}. Asegúrate de que tu celular/PC esté **conectado a la red Wi-Fi temporal del dispositivo** (ej: WaterKontrol-AP) para enviar las credenciales.`, 
+            "red");
+    }
+    document.getElementById('submitButton').disabled = false;
+}
+
+function showMessage(type, content, color) {
+    messageElement.style.display = 'block';
+    messageElement.className = `message ${type}`;
+    messageElement.textContent = content;
+    if (color) {
+         messageElement.style.backgroundColor = color; // Usar background-color para los estilos de fondo
+         messageElement.style.color = 'white'; // Asegurar texto blanco para fondo oscuro
+    }
+}
+// NOTA CRÍTICA: Se omite la lógica de escaneo (scanWifi) porque depende de un plugin Cordova/Capacitor nativo.
+
+
+===================================================================
+ARCHIVO: public/style.css
+===================================================================
+/* Variables de Color */
+:root {
+    --primary-color: #007bff; /* Azul */
+    --secondary-color: #6c757d; /* Gris */
+    --success-color: #28a745; /* Verde */
+    --background-color: #f4f7fa; /* Fondo suave */
+    --card-background: #ffffff; /* Fondo de tarjetas/formularios */
+    --text-color: #343a40; /* Texto oscuro */
+    --shadow-light: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Estilos Globales */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+/* Contenedor del Formulario */
+.auth-container {
+    background: var(--card-background);
+    padding: 35px 40px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-light);
+    width: 100%;
+    max-width: 400px;
+}
+
+/* Títulos */
+h2 {
+    text-align: center;
+    color: var(--primary-color);
+    margin-bottom: 25px;
+}
+h1 {
+    text-align: center;
+    color: var(--primary-color);
+    margin-bottom: 30px;
+    font-size: 1.8rem;
+}
+
+/* Elementos de formulario */
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: var(--secondary-color);
+}
+
+input[type="email"], 
+input[type="text"], 
+input[type="password"] {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 20px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    box-sizing: border-box;
+    transition: border-color 0.3s;
+}
+
+input:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.25);
+}
+
+/* Botones */
+button {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 12px 15px;
+    margin-top: 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 1rem;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+button:disabled {
+    background-color: #a0c4f1;
+    cursor: not-allowed;
+}
+
+/* Enlaces */
+.links {
+    margin-top: 20px;
+    text-align: center;
+    display: flex;
+    justify-content: space-between;
+}
+.links a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.3s;
+}
+.links a:hover {
+    color: #0056b3;
+}
+
+/* Mensajes de error/éxito (usado en index.html, register.html) */
+#message {
+    text-align: center;
+    font-weight: bold;
+}
+```

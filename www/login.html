@@ -2,43 +2,47 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Login - WaterKontrol</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WaterKontrol – Iniciar sesión</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <div class="auth-container">
-    <h2>Iniciar Sesión</h2>
-    <form id="loginForm">
-      <label for="correo">Correo:</label>
-      <input type="email" id="correo" name="correo" placeholder="tu@correo.com" required>
+    <h2>Iniciar sesión</h2>
 
-      <label for="clave">Contraseña:</label>
-      <input type="password" id="clave" name="clave" placeholder="Contraseña" required>
+    <form id="loginForm">
+      <label for="correo">Correo</label>
+      <input type="email" id="correo" name="correo" required>
+
+      <label for="clave">Contraseña</label>
+      <input type="password" id="clave" name="clave" required>
 
       <button type="submit">Entrar</button>
       <p id="message" class="message"></p>
     </form>
+
     <div class="links">
-      <a href="/register.html">¿No tienes cuenta? Regístrate</a>
+      <a href="/register.html">Crear cuenta</a>
     </div>
   </div>
 
   <script>
-    document.getElementById('loginForm').addEventListener('submit', async function (e) {
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-
-      const correo = document.getElementById('correo').value.trim();
-      const clave = document.getElementById('clave').value;
       const message = document.getElementById('message');
-
-      message.textContent = 'Iniciando sesión...';
+      message.textContent = 'Enviando...';
       message.className = 'message';
+
+      const body = JSON.stringify({
+        correo: document.getElementById('correo').value.trim(),
+        clave: document.getElementById('clave').value
+      });
 
       try {
         const res = await fetch('/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ correo, clave })
+          body
         });
 
         const data = await res.json();
@@ -52,8 +56,8 @@
           message.className = 'message error';
         }
       } catch (err) {
-        console.error('Error al iniciar sesión:', err);
-        message.textContent = '❌ Error de conexión con el servidor.';
+        console.error(err);
+        message.textContent = '❌ Error de red';
         message.className = 'message error';
       }
     });

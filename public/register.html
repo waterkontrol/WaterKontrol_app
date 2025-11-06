@@ -2,70 +2,67 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WaterKontrol - Registro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WaterKontrol – Registro</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <div class="auth-container">
-    <h2>Crear Cuenta</h2>
+    <h2>Crear cuenta</h2>
+
     <form id="registerForm">
-      <label for="nombre">Nombre Completo:</label>
+      <label for="nombre">Nombre completo</label>
       <input type="text" id="nombre" name="nombre" required>
 
-      <label for="correo">Correo:</label>
+      <label for="correo">Correo</label>
       <input type="email" id="correo" name="correo" required>
 
-      <label for="clave">Contraseña:</label>
+      <label for="clave">Contraseña</label>
       <input type="password" id="clave" name="clave" required>
 
       <button type="submit">Registrarse</button>
       <p id="message" class="message"></p>
     </form>
+
     <div class="links">
       <a href="/login.html">¿Ya tienes cuenta? Inicia sesión</a>
     </div>
   </div>
 
   <script>
-    document.getElementById('registerForm').addEventListener('submit', async function (e) {
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-
       const message = document.getElementById('message');
-      const button = this.querySelector('button[type="submit"]');
-      button.disabled = true;
       message.textContent = 'Registrando...';
       message.className = 'message';
 
-      const data = {
+      const body = JSON.stringify({
         nombre: document.getElementById('nombre').value.trim(),
         correo: document.getElementById('correo').value.trim(),
         clave: document.getElementById('clave').value
-      };
+      });
 
       try {
         const res = await fetch('/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
+          body
         });
 
-        const result = await res.json();
+        const data = await res.json();
 
         if (res.ok) {
-          message.textContent = result.message;
+          message.textContent = data.message;
           message.className = 'message success';
           setTimeout(() => window.location.href = '/login.html', 2000);
         } else {
-          message.textContent = result.message || 'Error desconocido';
+          message.textContent = data.message || 'Error desconocido';
           message.className = 'message error';
         }
       } catch (err) {
-        console.error('Error al registrar:', err);
-        message.textContent = '❌ Error de conexión con el servidor.';
+        console.error(err);
+        message.textContent = '❌ Error de red';
         message.className = 'message error';
-      } finally {
-        button.disabled = false;
       }
     });
   </script>

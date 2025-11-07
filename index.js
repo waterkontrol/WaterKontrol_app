@@ -5,43 +5,30 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const mqtt = require('mqtt');
-const path = require('path'); // ¡CRÍTICO! Necesario para servir archivos estáticos y rutas
-const bcrypt = require('bcrypt'); // Necesario para hashing de contraseñas
-const crypto = require('crypto'); // Necesario para generar tokens
-const nodemailer = require('nodemailer'); // Necesario para el envío de correos
-const cookieParser = require('cookie-parser'); // ¡NUEVO! Necesario para la gestión de cookies de sesión
-const saltRounds = 10;
+const path = require('path'); 
+const bcrypt = require('bcrypt'); 
+const crypto = require('crypto'); 
+const nodemailer = require('nodemailer'); 
+const cookieParser = require('cookie-parser'); 
+const saltRounds = 10; 
 
 // --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
-
-// MIDDLEWARE PRINCIPAL
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser()); // ¡NUEVO! Activar middleware de cookies
-
-// ✅ CORS explícito para evitar bloqueos en frontend
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
+app.use(express.json()); 
+app.use(express.urlencoded({ extended: true })); 
+app.use(cookieParser()); 
 
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
 // ===================================================================================
 console.log('🔧 Intentando conectar a la base de datos...');
-// CRÍTICO: Detectar el entorno para configurar SSL y Host
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
 console.log('📋 DATABASE_URL:', process.env.DATABASE_URL ? '✅ Definida' : '❌ NO DEFINIDA');
 console.log(`📋 Entorno: ${isProduction ? 'Producción (SSL ON)' : 'Local (SSL OFF)'}`);
 
 const poolConfig = {
-  connectionString: process.env.DATABASE_URL,
-  // CRÍTICO: Configuración SSL para Railway
-  ssl: isProduction ? { rejectUnauthorized: false } : false,
+  connectionString: process.env.DATABASE_URL, 
+  ssl: isProduction ? { rejectUnauthorized: false } : false, 
   connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 30000,
   max: 10
@@ -53,10 +40,15 @@ const testDatabaseConnection = async () => {
   let client;
   try {
     client = await pool.connect();
-    console.log('✅ Conexión a la base de datos exitosa.');
+    console.log('✅ Conexión a la base de datos establecida correctamente');
+    const result = await client.query('SELECT 1 as db_connection_ok');
+    if (result.rows[0].db_connection_ok === 1) {
+        console.log('✅ db connection ok');
+    }
+    await initializeDatabase(client);
     return true;
-  } catch (err) {
-    console.error('❌ Error de conexión a la base de datos:', err.message);
+  } catch (error) {
+    console.error('❌ Error crítico al conectar/verificar la DB:', error.message);
     return false;
   } finally {
     if (client) {
@@ -65,77 +57,157 @@ const testDatabaseConnection = async () => {
   }
 };
 
-const hashPassword = async (password) => {
-  return bcrypt.hash(password, saltRounds);
-};
+const initializeDatabase = async (client) => {
+    // Verificar que la tabla 'usuario' exista con los campos mínimos
+    const checkUserTable = await client.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name='usuario' AND column_name IN ('correo', 'clave', 'token_verificacion', 'estatus')
+    `);
+    
+    const requiredColumns = ['correo', 'clave', 'token_verificacion', 'estatus'];
+    const foundColumns = checkUserTable.rows.map(row => row.column_name);
+    
+    if (requiredColumns.every(col => foundColumns.includes(col))) {
+        console.log(`✅ Tabla "usuario" verificada. Usando campos: ${foundColumns.join(', ')}.`);
+    } else {
+        console.warn('⚠️ La tabla "usuario" puede necesitar ser creada o revisada.');
+    }
 
-const comparePassword = async (password, hash) => {
-  return bcrypt.compare(password, hash);
-};
+    // Nota: La creación de la tabla telemetria debería ser similar
+}
+
 
 // ===================================================================================
-// LOGICA DE CONEXION MQTT
+// LÓGICA DE AUTENTICACIÓN
 // ===================================================================================
 
-let mqttClient;
-const procesarMensajesMqtt = async () => {
+const verifyToken = async (token) => {
+    let client;
+    try {
+        client = await pool.connect();
+        const result = await client.query(
+            'SELECT correo FROM usuario WHERE token_verificacion = $1 AND estatus = $2',
+            [token, 'PENDIENTE']
+        );
+        if (result.rows.length === 1) {
+            await client.query(
+                'UPDATE usuario SET estatus = $1, token_verificacion = NULL WHERE correo = $2',
+                ['ACTIVO', result.rows[0].correo]
+            );
+            return { success: true };
+        }
+        return { success: false, message: 'Token de verificación inválido o ya usado.' };
+    } catch (error) {
+        console.error('Error en verifyToken:', error);
+        return { success: false, message: 'Error interno del servidor.' };
+    } finally {
+        if (client) client.release();
+    }
+};
+
+const authenticateToken = (req, res, next) => {
+    const token = req.cookies.session_token;
+    
+    // Si la ruta es estática o de autenticación, la dejamos pasar.
+    if (req.path.startsWith('/auth') || req.path === '/' || req.path.endsWith('.html') || req.path.endsWith('.css')) {
+        return next();
+    }
+
+    // Lógica para proteger /app.html
+    if (req.path.includes('/app.html')) {
+        if (!token) {
+            return res.redirect('/');
+        }
+    }
+    
+    return next(); 
+};
+
+
+// ===================================================================================
+// LÓGICA DE CORREO ELECTRÓNICO
+// ===================================================================================
+
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+const sendVerificationEmail = async (correo, token) => {
+    const verificationUrl = `${process.env.APP_BASE_URL}/auth/verify?token=${token}`;
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: correo,
+        subject: 'Verificación de Cuenta WaterKontrol',
+        html: `
+            <h1>Verificación de Correo</h1>
+            <p>Gracias por registrarte en WaterKontrol. Por favor, haz clic en el siguiente enlace para verificar tu cuenta:</p>
+            <a href="${verificationUrl}">${verificationUrl}</a>
+            <p>Si no solicitaste este registro, por favor ignora este correo.</p>
+        `
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ Correo de verificación enviado a: ${correo}`);
+        return true;
+    } catch (error) {
+        console.error('❌ Error al enviar correo de verificación:', error);
+        return false;
+    }
+};
+
+
+// ===================================================================================
+// LÓGICA MQTT
+// ===================================================================================
+let mqttClient = null;
+
+const procesarMensajesMqtt = () => {
   const brokerUrl = process.env.MQTT_BROKER_URL;
   if (!brokerUrl) {
-    console.error('❌ MQTT_BROKER_URL no está definido. Omitiendo conexión MQTT.');
+    console.error('❌ MQTT_BROKER_URL no está definido. Saltando la conexión MQTT.');
     return;
   }
 
-  mqttClient = mqtt.connect(brokerUrl);
+  const client = mqtt.connect(brokerUrl);
+  mqttClient = client;
 
-  mqttClient.on('connect', () => {
-    console.log('✅ Conexión MQTT exitosa. Suscribiéndose a topics...');
-    // Suscribirse a un topic genérico de telemetría de dispositivos
-    mqttClient.subscribe('dispositivos/+/telemetria', (err) => {
-      if (err) {
-        console.error('❌ Error de suscripción MQTT:', err);
+  client.on('connect', () => {
+    console.log('✅ Conectado al broker MQTT.');
+    const topic = 'dispositivos/+/telemetria';
+    client.subscribe(topic, (err) => {
+      if (!err) {
+        console.log(`✅ Suscrito exitosamente al topic: ${topic}`);
       } else {
-        console.log('✅ Suscripción a [dispositivos/+/telemetria] exitosa.');
+        console.error(`❌ Error al suscribirse al topic ${topic}:`, err);
       }
     });
   });
 
-  mqttClient.on('message', async (topic, message) => {
+  client.on('message', async (topic, message) => {
     let dbClient;
     try {
-      dbClient = await pool.connect();
-      await dbClient.query('BEGIN');
-
       const data = JSON.parse(message.toString());
-      const { temp, ph, serie } = data; // Asumiendo que el dispositivo envía { temp, ph, serie }
+      console.log(`[${new Date().toISOString()}] Mensaje de MQTT en [${topic}]:`, data);
 
-      if (!serie || temp === undefined || ph === undefined) {
-        console.warn(`⚠️ Mensaje MQTT inválido o incompleto en [${topic}]:`, data);
-        await dbClient.query('ROLLBACK');
-        return;
-      }
+      dbClient = await pool.connect();
+      await dbClient.query('BEGIN'); 
 
-      // 1. Obtener el ID del dispositivo usando la serie
-      const deviceQuery = 'SELECT dsp_id FROM dispositivos WHERE serie = $1';
-      const deviceResult = await dbClient.query(deviceQuery, [serie]);
-
-      if (deviceResult.rows.length === 0) {
-        console.warn(`⚠️ Dispositivo con serie [${serie}] no encontrado. Mensaje no procesado.`);
-        await dbClient.query('ROLLBACK');
-        return;
-      }
-
-      const dsp_id = deviceResult.rows[0].dsp_id;
-
-      // 2. Insertar los datos de telemetría en la tabla de datos
-      const insertDataQuery = `
-        INSERT INTO datos (dsp_id, temperatura, ph, topic)
-        VALUES ($1, $2, $3, $4)
-        RETURNING msg_id
+      const insertQuery = `
+        INSERT INTO telemetria (topic, nivel, fecha)
+        VALUES ($1, $2, NOW())
+        RETURNING id;
       `;
-      const insertResult = await dbClient.query(insertDataQuery, [dsp_id, temp, ph, topic]);
-      const msg_id = insertResult.rows[0].msg_id;
-
-      await dbClient.query('COMMIT');
+      // Asumiendo que data.nivel existe
+      const result = await dbClient.query(insertQuery, [topic, data.nivel]);
+      const msg_id = result.rows[0].id;
+      
+      await dbClient.query('COMMIT'); 
       console.log(`✅ Mensaje del topic [${topic}] procesado y guardado con éxito (MSG_ID: ${msg_id}).`);
 
     } catch (error) {
@@ -157,242 +229,209 @@ const procesarMensajesMqtt = async () => {
 
 
 // ===================================================================================
-// RUTAS DE AUTENTICACIÓN (LOGIN, REGISTER, LOGOUT)
+// RUTAS ESTÁTICAS Y MIDDLEWARE DE AUTENTICACIÓN
 // ===================================================================================
 
-// Middleware para verificar la sesión/cookie
-const checkAuth = (req, res, next) => {
-  // En un entorno real, verificarías un token JWT o una sesión de base de datos
-  if (req.cookies.user_id) {
-    req.userId = req.cookies.user_id; // Adjuntar el ID de usuario a la petición
-    next();
-  } else {
-    // Si no hay cookie, redirigir al login
-    res.redirect('/login.html');
-  }
-};
-
-// Ruta de Registro de Usuario
-app.post('/auth/register', async (req, res) => {
-  const { nombre, correo, clave } = req.body;
-  let client;
-  try {
-    if (!nombre || !correo || !clave) {
-      return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
-    }
-
-    client = await pool.connect();
-    const hashedPassword = await hashPassword(clave);
-
-    // Verificar si el correo ya existe
-    const checkUser = await client.query('SELECT user_id FROM usuarios WHERE correo = $1', [correo]);
-    if (checkUser.rows.length > 0) {
-      return res.status(409).json({ message: 'Este correo ya está registrado.' });
-    }
-
-    // Insertar el nuevo usuario (estatus 'verificacion' para simular un proceso de email)
-    const result = await client.query(
-      'INSERT INTO usuarios (nombre, correo, clave_hash) VALUES ($1, $2, $3) RETURNING user_id',
-      [nombre, correo, hashedPassword]
-    );
-
-    // Enviar respuesta al cliente (NOTA: NO debería establecer la sesión hasta verificar el correo)
-    res.status(200).json({
-      message: '✅ Registro exitoso. Ahora puedes iniciar sesión.'
-    });
-
-  } catch (error) {
-    console.error('Error en /auth/register:', error.message);
-    res.status(500).json({ message: 'Error interno del servidor.' });
-  } finally {
-    if (client) client.release();
-  }
-});
-
-
-// Ruta de Login
-app.post('/auth/login', async (req, res) => {
-  const { correo, clave } = req.body;
-  let client;
-  try {
-    if (!correo || !clave) {
-      return res.status(400).json({ message: 'Correo y Contraseña son obligatorios.' });
-    }
-
-    client = await pool.connect();
-    const result = await client.query('SELECT user_id, clave_hash FROM usuarios WHERE correo = $1', [correo]);
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ message: 'Credenciales inválidas.' });
-    }
-
-    const user = result.rows[0];
-    const match = await comparePassword(clave, user.clave_hash);
-
-    if (match) {
-      // Éxito: Establecer la cookie de sesión
-      res.cookie('user_id', user.user_id, {
-        httpOnly: true, // La cookie no es accesible por JavaScript en el navegador
-        secure: isProduction, // CRÍTICO: Solo enviar con HTTPS en producción
-        maxAge: 1000 * 60 * 60 * 24 * 7 // 7 días de validez
-      });
-
-      // Enviar respuesta JSON al cliente
-      res.status(200).json({
-        message: 'Inicio de sesión exitoso.',
-        redirect: '/app.html' // Redirigir a la página principal de la app
-      });
-    } else {
-      return res.status(401).json({ message: 'Credenciales inválidas.' });
-    }
-
-  } catch (error) {
-    console.error('Error en /auth/login:', error.message);
-    res.status(500).json({ message: 'Error interno del servidor.' });
-  } finally {
-    if (client) client.release();
-  }
-});
-
-// Ruta de Logout
-app.post('/auth/logout', (req, res) => {
-  res.clearCookie('user_id'); // Eliminar la cookie de sesión
-  res.status(200).json({ message: 'Sesión cerrada.' });
-});
-
-// ===================================================================================
-// RUTAS DE API (DISPOSITIVOS)
-// ===================================================================================
-
-// 1. Obtener la lista de dispositivos del usuario
-app.get('/api/dispositivos', checkAuth, async (req, res) => {
-  let client;
-  try {
-    client = await pool.connect();
-    // NOTA: Asumiendo que existe una tabla 'usuarios_dispositivos' o similar para relacionar.
-    // Usaremos una consulta directa de dispositivos para este ejemplo (si hay una columna user_id en dispositivos)
-    const query = 'SELECT serie, modelo, tipo, marca, topic, estatus FROM dispositivos WHERE user_id = $1 ORDER BY serie';
-    const result = await client.query(query, [req.userId]);
-
-    // MOCK para asegurar que el frontend siempre tenga algo que mostrar
-    // NOTA: En producción, ESTA LÍNEA DEBERÍA ELIMINARSE.
-    if (result.rows.length === 0) {
-      return res.json([
-        { serie: 'WKM-MOCK1', modelo: 'Medidor pH/Temp', tipo: 'Medidor', marca: 'WaterKontrol', topic: 'disp/mock/tele', estatus: 'online' },
-      ]);
-    }
-
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error al obtener dispositivos:', error.message);
-    res.status(500).json({ message: 'Error al cargar dispositivos.' });
-  } finally {
-    if (client) client.release();
-  }
-});
-
-// 2. Ruta de registro de un nuevo dispositivo (desde add_device_config.js)
-app.post('/api/dispositivo/registro', checkAuth, async (req, res) => {
-  const { serie, modelo, tipo, marca, topic } = req.body;
-  let client;
-  try {
-    if (!serie || !modelo || !topic) {
-      return res.status(400).json({ message: 'Faltan campos obligatorios.' });
-    }
-
-    client = await pool.connect();
-    // Verificar si el dispositivo ya existe por serie
-    const checkDisp = await client.query('SELECT dsp_id FROM dispositivos WHERE serie = $1', [serie]);
-    if (checkDisp.rows.length > 0) {
-      return res.status(409).json({ message: `El dispositivo con serie ${serie} ya está registrado.` });
-    }
-
-    // Insertar nuevo dispositivo
-    const insertQuery = `
-      INSERT INTO dispositivos (user_id, serie, modelo, tipo, marca, topic)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING dsp_id
-    `;
-    await client.query(insertQuery, [req.userId, serie, modelo, tipo, marca || 'N/A', topic]);
-
-    res.status(201).json({ message: 'Dispositivo registrado con éxito.' });
-
-  } catch (error) {
-    console.error('Error en /api/dispositivo/registro:', error.message);
-    res.status(500).json({ message: 'Error interno al registrar dispositivo.' });
-  } finally {
-    if (client) client.release();
-  }
-});
+app.use(authenticateToken); 
+// CRÍTICO: Servir el frontend desde la carpeta 'www' (donde lo copia el postinstall)
+app.use(express.static(path.join(__dirname, 'www')));
 
 
 // ===================================================================================
-// RUTA DE SALUD PARA RAILWAY (HEALTHCHECK) <--- ¡SOLUCIÓN CRÍTICA!
+// RUTAS DE LA API (ENDPOINT)
 // ===================================================================================
-// Railway verifica esta ruta para saber si la aplicación está viva.
+
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'UP', service: 'waterkontrol_app', db: pool.totalCount > 0 ? 'connected' : 'connecting' });
+    res.status(200).send({ status: 'OK', service: 'waterkontrol-backend' });
 });
 
-
-// ===================================================================================
-// SERVIDOR DE ARCHIVOS ESTÁTICOS (FRONTEND) <--- ¡SOLUCIÓN CRÍTICA!
-// ===================================================================================
-// CRÍTICO: Se cambia a servir el directorio actual (__dirname) porque tus archivos HTML/CSS
-// están en la raíz del proyecto, no en una carpeta 'www'.
-app.use(express.static(path.join(__dirname)));
-
-// Middleware de redirección para la raíz: redirige '/' a '/login.html'
 app.get('/', (req, res) => {
-  // Si tiene sesión, redirigir a la app, sino, a login
-  if (req.cookies.user_id) {
-    return res.redirect('/app.html');
-  }
-  res.redirect('/login.html');
+    res.sendFile(path.join(__dirname, 'www', 'index.html'));
+});
+
+app.get('/app.html', (req, res) => {
+    if (!req.cookies.session_token) {
+        return res.redirect('/');
+    }
+    res.sendFile(path.join(__dirname, 'www', 'app.html'));
+});
+
+// -----------------------------------------------------------------------------------
+// RUTAS DE AUTENTICACIÓN
+// -----------------------------------------------------------------------------------
+
+app.post('/auth/register', async (req, res) => {
+    const { nombre, correo, clave } = req.body;
+    let client;
+
+    if (!nombre || !correo || !clave) {
+        return res.status(400).json({ message: 'Faltan campos obligatorios.' });
+    }
+    
+    try {
+        client = await pool.connect();
+        
+        const existingUser = await client.query('SELECT * FROM usuario WHERE correo = $1', [correo]);
+        if (existingUser.rows.length > 0) {
+            return res.status(409).json({ message: 'El correo ya está registrado.' });
+        }
+
+        const hashedClave = await bcrypt.hash(clave, saltRounds);
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+
+        await client.query(
+            'INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) VALUES ($1, $2, $3, $4, $5)',
+            [nombre, correo, hashedClave, verificationToken, 'PENDIENTE']
+        );
+
+        sendVerificationEmail(correo, verificationToken); 
+        
+        res.status(201).json({ 
+            message: 'Registro exitoso. Revisa tu correo para verificar la cuenta.',
+            verification_sent: true
+        });
+
+    } catch (error) {
+        console.error('Error al registrar usuario:', error);
+        res.status(500).json({ message: 'Error interno del servidor al registrar.' });
+    } finally {
+        if (client) client.release();
+    }
+});
+
+app.get('/auth/verify', async (req, res) => {
+    const { token } = req.query;
+    if (!token) {
+        return res.status(400).send('Token de verificación no proporcionado.');
+    }
+
+    const { success, message } = await verifyToken(token);
+    
+    if (success) {
+        res.redirect('/?message=✅ Cuenta verificada. Puedes iniciar sesión.');
+    } else {
+        res.status(400).send(`❌ Error de Verificación: ${message}`);
+    }
+});
+
+app.post('/auth/login', async (req, res) => {
+    const { correo, clave } = req.body;
+    let client;
+    
+    try {
+        client = await pool.connect();
+        const userResult = await client.query('SELECT * FROM usuario WHERE correo = $1', [correo]);
+        
+        if (userResult.rows.length === 0) {
+            return res.status(401).json({ message: 'Credenciales inválidas.' });
+        }
+
+        const user = userResult.rows[0];
+        
+        // 1. Verificar estatus (CRÍTICO: JSON para el frontend)
+        if (user.estatus !== 'ACTIVO') {
+            return res.status(403).json({ 
+                message: 'Cuenta pendiente de verificación. Revisa tu correo.',
+                error_code: 'ACCOUNT_PENDING'
+            });
+        }
+
+        // 2. Comparar contraseña
+        const isMatch = await bcrypt.compare(clave, user.clave);
+
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Credenciales inválidas.' });
+        }
+
+        // 3. Crear Token de Sesión
+        const sessionToken = crypto.randomBytes(64).toString('hex'); 
+
+        // 4. Establecer la cookie de sesión
+        res.cookie('session_token', sessionToken, { 
+            httpOnly: true, 
+            secure: isProduction, 
+            maxAge: 7 * 24 * 60 * 60 * 1000, 
+            sameSite: 'Lax' 
+        });
+        
+        // 5. Respuesta exitosa
+        res.status(200).json({ 
+            message: 'Inicio de sesión exitoso.', 
+            redirect: '/app.html' 
+        });
+
+    } catch (error) {
+        console.error('Error en el login:', error);
+        res.status(500).json({ message: 'Error interno del servidor.' });
+    } finally {
+        if (client) client.release();
+    }
+});
+
+app.post('/auth/logout', (req, res) => {
+    res.clearCookie('session_token');
+    res.status(200).json({ message: 'Sesión cerrada.' }); 
 });
 
 
-// Manejador de errores para rutas no encontradas (404)
-// ** CRÍTICO: DEBE IR DESPUÉS DE TODAS LAS OTRAS RUTAS **
-app.use((req, res, next) => {
-  // Para peticiones de API que no sean encontradas, devolvemos JSON
-  if (req.path.startsWith('/auth/') || req.path.startsWith('/api/')) {
-    return res.status(404).json({ message: `Ruta de API no encontrada: ${req.path}` });
-  }
-  // Para rutas de frontend que no sean encontradas, devolvemos 404
-  res.status(404).sendFile(path.join(__dirname, '404.html')) || res.send('Error 404: Página no encontrada');
+// -----------------------------------------------------------------------------------
+// RUTAS DE DISPOSITIVOS Y TELEMETRÍA (LÓGICA PARCIAL/DE PRUEBA)
+// -----------------------------------------------------------------------------------
+app.post('/dispositivo', async (req, res) => {
+    const { usr_id, dsp_id, topic, tipo, marca } = req.body;
+    
+    // NOTA: Aquí se debería implementar la lógica de guardado en la tabla 'dispositivo'
+    console.log(`📌 Dispositivo ${dsp_id} intentando registrarse con topic ${topic}.`);
+    res.status(200).json({ message: 'Registro de dispositivo recibido (Lógica pendiente de implementar).', dsp_id });
+});
+
+// Ruta de ejemplo para obtener dispositivos (Mock/Estatica)
+app.get('/dispositivos', (req, res) => {
+    // NOTA: Esta ruta debería consultar la tabla 'dispositivo' filtrada por el usuario logueado.
+    const mockDevices = [
+        { id: 1, nombre: 'Tanque Principal', tipo: 'Nivel', marca: 'WaterKontrol', topic: 'dispositivos/tk-001/telemetria', estatus: 'ACTIVO' },
+        { id: 2, nombre: 'Pozo de Bombeo', tipo: 'Bomba', marca: 'WK-Pro', topic: 'dispositivos/pozo-002/telemetria', estatus: 'INACTIVO' }
+    ];
+    res.json(mockDevices);
 });
 
 
 // ===================================================================================
-// LÓGICA DE INICIO DEL SERVIDOR
+// LÓGICA DE INICIO DEL SERVIDOR (CRÍTICO PARA RAILWAY)
 // ===================================================================================
-const PORT = process.env.PORT || 8080;
+
+const PORT = process.env.PORT || 8080; 
 
 const initializeApplicationServices = async () => {
-  console.log('🔍 Iniciando verificación de base de datos y MQTT (en segundo plano)...');
-  const dbConnected = await testDatabaseConnection();
-
-  if (!dbConnected) {
-    console.error('❌ No se pudo conectar a la base de datos. Las funciones de autenticación y DB fallarán.');
-  } else {
-    try {
-      procesarMensajesMqtt();
-    } catch (error) {
-      console.error('❌ Error iniciando MQTT:', error);
+    console.log('🔍 Iniciando verificación de base de datos y MQTT (en segundo plano)...');
+    
+    const dbConnected = await testDatabaseConnection();
+    
+    if (!dbConnected) {
+        console.error('❌ No se pudo conectar a la base de datos. Las funciones de autenticación y DB fallarán.');
+    } else {
+        try {
+            // Iniciar MQTT solo si la conexión a BD fue exitosa
+            procesarMensajesMqtt();
+        } catch (error) {
+            console.error('❌ Error iniciando MQTT:', error);
+        }
     }
-  }
 };
 
 const startServer = () => {
-  console.log('🚀 Iniciando servidor Express...');
-  const host = isProduction ? '0.0.0.0' : 'localhost';
+    console.log('🚀 Iniciando servidor Express...');
+    
+    const host = isProduction ? '0.0.0.0' : 'localhost';
 
-  app.listen(PORT, host, () => {
-    console.log(`✅ Servidor Express ejecutándose en ${host}:${PORT}`);
-    console.log(`🌐 URL de la aplicación: ${process.env.APP_BASE_URL || `http://${host}:${PORT}`}`);
-    initializeApplicationServices();
-  });
+    // 1. Iniciar Express inmediatamente para que el healthcheck responda
+    app.listen(PORT, host, () => {
+        console.log(`✅ Servidor Express ejecutándose en ${host}:${PORT}`);
+        console.log(`✅ Healthcheck disponible en /health`);
+        
+        // 2. Ejecutar la lógica pesada (DB y MQTT) DESPUÉS de que el servidor esté activo
+        initializeApplicationServices(); 
+    });
 };
 
 startServer();

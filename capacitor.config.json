@@ -1,5 +1,6 @@
 {
   "appId": "com.waterkontrol.app",
   "appName": "WaterKontrolApp",
-  "webDir": "www"
+  "webDir": "www",
+  "bundledWebRuntime": false
 }

@@ -1,4 +1,4 @@
-// Cargar las variables de entorno desde el archivo .env
+// Cargar las variables de entornos desde el archivo .env
 require('dotenv').config();
 // Importar las librerías necesarias
 const express = require('express');
@@ -16,6 +16,19 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// ===================================================================================
+// MANEJO DE ERRORES NO CAPTURADOS
+// ===================================================================================
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Intenta no matar el proceso, pero registra el error
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  // Opcional: process.exit(1); // Si quieres que el proceso muera
+});
 
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
@@ -45,7 +58,7 @@ const testDatabaseConnection = async () => {
         console.log('✅ db connection ok');
     }
     await initializeDatabase(client); // Llama a la inicialización principal
-    await ensureDispositivoTableExists(client); // Llama a la inicialización específica de dispositivos
+    // NO llamamos a ensureDispositivoTableExists aquí para evitar bloqueos iniciales
     return true;
   } catch (error) {
     console.error('❌ Error crítico al conectar/verificar la DB:', error.message);
@@ -75,27 +88,9 @@ const initializeDatabase = async (client) => {
     // Nota: La creación de la tabla telemetria debería ser similar
 }
 
-// Nueva función para asegurar la existencia de la tabla 'dispositivo'
-const ensureDispositivoTableExists = async (client) => {
-    try {
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS dispositivo (
-                id SERIAL PRIMARY KEY,
-                usr_id INTEGER, -- Clave foránea opcional para asociar al usuario
-                nombre VARCHAR(255) NOT NULL,
-                tipo VARCHAR(100),
-                marca VARCHAR(100),
-                topic VARCHAR(255) UNIQUE NOT NULL, -- El topic debería ser único
-                fecha_registro TIMESTAMP DEFAULT NOW()
-                -- CONSTRAINT fk_usuario FOREIGN KEY (usr_id) REFERENCES usuario(id)
-            );
-        `);
-        console.log('✅ Tabla "dispositivo" verificada o creada.');
-    } catch (error) {
-        console.error('❌ Error creando tabla "dispositivo":', error);
-        throw error; // Lanza el error para que lo maneje testDatabaseConnection
-    }
-}
+// NOTA: La creación de la tabla 'dispositivo' debería hacerse en una migración
+// o script de inicialización separado, no aquí en runtime para evitar bloqueos.
+// const ensureDispositivoTableExists = async (client) => { ... } // <-- QUITADO DE AQUÍ
 
 
 // ===================================================================================
@@ -372,7 +367,7 @@ app.post('/auth/logout', (req, res) => {
 });
 
 // -----------------------------------------------------------------------------------
-// RUTAS DE DISPOSITIVOS Y TELEMETRÍA (LÓGICA COMPLETADA)
+// RUTAS DE DISPOSITIVOS Y TELEMETRÍA (LÓGICA COMPLETADA - MANEJO DE ERRORES)
 // -----------------------------------------------------------------------------------
 
 // Ruta para registrar un nuevo dispositivo y asociarlo al usuario
@@ -405,8 +400,11 @@ app.post('/dispositivo', async (req, res) => {
         res.status(201).json({ message: 'Dispositivo registrado y asociado al usuario.', nombre, topic });
     } catch (error) {
         console.error('Error al registrar dispositivo:', error);
-        if (error.code === '23505') { // Error de clave única violada (topic duplicado)
+        // Verificar si el error es por violación de clave única (topic duplicado)
+        if (error.code === '23505') {
              res.status(409).json({ message: 'El topic del dispositivo ya está registrado.' });
+        } else if (error.code === '42P01') { // Undefined table
+             res.status(500).json({ message: 'Error interno: La tabla "dispositivo" no existe. Contacte al administrador.' });
         } else {
              res.status(500).json({ message: 'Error interno del servidor al registrar el dispositivo.' });
         }
@@ -440,7 +438,11 @@ app.get('/dispositivos', async (req, res) => {
         res.json(result.rows);
     } catch (error) {
         console.error('Error al obtener dispositivos:', error);
-        res.status(500).json({ message: 'Error interno del servidor al obtener dispositivos.' });
+        if (error.code === '42P01') { // Undefined table
+             res.status(500).json({ message: 'Error interno: La tabla "dispositivo" no existe. Contacte al administrador.' });
+        } else {
+             res.status(500).json({ message: 'Error interno del servidor al obtener dispositivos.' });
+        }
     } finally {
         if (client) client.release();
     }

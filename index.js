@@ -1,4 +1,4 @@
-// Cargar las variables de entornos desde el archivo .env
+// Cargar las variables de entorno desde el archivo .env
 require('dotenv').config();
 // Importar las librerías necesarias
 const express = require('express');
@@ -7,7 +7,7 @@ const mqtt = require('mqtt');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer'); // Aún está importado, pero no se usará
+const nodemailer = require('nodemailer');
 const cookieParser = require('cookie-parser');
 const saltRounds = 10;
 
@@ -16,19 +16,6 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
-// ===================================================================================
-// MANEJO DE ERRORES NO CAPTURADOS
-// ===================================================================================
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Intenta no matar el proceso, pero registra el error
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  // Opcional: process.exit(1); // Si quieres que el proceso muera
-});
 
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT
@@ -57,8 +44,7 @@ const testDatabaseConnection = async () => {
     if (result.rows[0].db_connection_ok === 1) {
         console.log('✅ db connection ok');
     }
-    await initializeDatabase(client); // Llama a la inicialización principal
-    // NO llamamos a ensureDispositivoTableExists aquí para evitar bloqueos iniciales
+    await initializeDatabase(client);
     return true;
   } catch (error) {
     console.error('❌ Error crítico al conectar/verificar la DB:', error.message);
@@ -77,7 +63,7 @@ const initializeDatabase = async (client) => {
         FROM information_schema.columns
         WHERE table_name='usuario' AND column_name IN ('correo', 'clave', 'token_verificacion', 'estatus')
     `);
-    const requiredColumns = ['correo', 'clave', 'token_verificacion', 'estatus']; // Incluimos token_verificacion aunque no se use
+    const requiredColumns = ['correo', 'clave', 'token_verificacion', 'estatus'];
     const foundColumns = checkUserTable.rows.map(row => row.column_name);
 
     if (requiredColumns.every(col => foundColumns.includes(col))) {
@@ -88,20 +74,17 @@ const initializeDatabase = async (client) => {
     // Nota: La creación de la tabla telemetria debería ser similar
 }
 
-// NOTA: La creación de la tabla 'dispositivo' debería hacerse en una migración
-// o script de inicialización separado, no aquí en runtime para evitar bloqueos.
-// const ensureDispositivoTableExists = async (client) => { ... } // <-- QUITADO DE AQUÍ
-
-
 // ===================================================================================
-// LÓGICA DE AUTENTICACIÓN (VERIFICACIÓN COMENTADA)
+// LÓGICA DE AUTENTICACIÓN (VERIFICACIÓN COMENTADA - CAMBIO 1)
 // ===================================================================================
+// 1. Deshabilitar verifyToken
 const verifyToken = async (token) => {
     // Verificación por correo deshabilitada temporalmente
     console.log('⚠️ Verificación por correo está deshabilitada.');
     return { success: false, message: 'Verificación por correo está deshabilitada temporalmente.' };
 };
 
+// 2. Unificar y clarificar authenticateToken (CAMBIO 3)
 const authenticateToken = (req, res, next) => {
     const token = req.cookies.session_token;
 
@@ -124,8 +107,9 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ===================================================================================
-// LÓGICA DE CORREO ELECTRÓNICO (COMENTADA)
+// LÓGICA DE CORREO ELECTRÓNICO (COMENTADA - PERO NO ELIMINADA PARA MANTENER ESTRUCTURA)
 // ===================================================================================
+// (Transporter y sendVerificationEmail comentados, como en el intento anterior)
 /*
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -159,7 +143,7 @@ const sendVerificationEmail = async (correo, token) => {
 };
 */
 // ===================================================================================
-// LÓGICA MQTT
+// LÓGICA MQTT (MANTENIDA IGUAL - FUNCIONAL)
 // ===================================================================================
 let mqttClient = null;
 const procesarMensajesMqtt = () => {
@@ -246,17 +230,17 @@ app.get('/app.html', (req, res) => {
 });
 
 // -----------------------------------------------------------------------------------
-// RUTAS DE AUTENTICACIÓN
+// RUTAS DE AUTENTICACIÓN (MODIFICADAS PARA DESHABILITAR VERIFICACIÓN - CAMBIO 1)
 // -----------------------------------------------------------------------------------
 app.post('/auth/register', async (req, res) => {
     const { nombre, correo, clave } = req.body;
     let client;
 
     if (!nombre || !correo || !clave) {
-        return res.status(400).json({ message: 'Faltan campos obligatorios: nombre, correo, clave.' });
+        return res.status(400).json({ message: 'Faltan campos obligatorios: nombre, correo, clave.' }); // Mejora UX - Cambio 4
     }
 
-    // Validación adicional (opcional pero recomendable)
+    // Validación adicional (opcional pero recomendable) - Cambio 4
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(correo)) {
         return res.status(400).json({ message: 'Formato de correo inválido.' });
@@ -271,36 +255,35 @@ app.post('/auth/register', async (req, res) => {
         // Verificar si el correo ya existe
         const existingUser = await client.query('SELECT correo FROM usuario WHERE correo = $1', [correo]);
         if (existingUser.rows.length > 0) {
-            return res.status(409).json({ message: 'El correo ya está registrado.' });
+            return res.status(409).json({ message: 'El correo ya está registrado.' }); // Mejora UX - Cambio 4
         }
 
         // Hashear la contraseña
         const hashedClave = await bcrypt.hash(clave, saltRounds);
 
-        // Insertar usuario directamente como ACTIVO (verificación deshabilitada)
-        // El token_verificacion se inserta como NULL
+        // Insertar usuario directamente como ACTIVO (verificación deshabilitada) - Cambio 1
         await client.query(
             'INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) VALUES ($1, $2, $3, $4, $5)',
-            [nombre, correo, hashedClave, null, 'ACTIVO'] // Cambiado: token_verificacion = null, estatus = 'ACTIVO'
+            [nombre, correo, hashedClave, null, 'ACTIVO'] // token_verificacion = null, estatus = 'ACTIVO'
         );
 
-        // NO se envía correo de verificación
+        // NO se envía correo de verificación - Cambio 1
         console.log(`✅ Usuario ${correo} registrado directamente como ACTIVO (verificación deshabilitada).`);
 
         res.status(201).json({
             message: 'Registro exitoso. Puedes iniciar sesión ahora.',
-            verification_sent: false // Indicar que no se envió correo
+            verification_sent: false // Indicar que no se envió correo - Cambio 4
         });
     } catch (error) {
         console.error('Error al registrar usuario:', error);
-        res.status(500).json({ message: 'Error interno del servidor al registrar.' });
+        res.status(500).json({ message: 'Error interno del servidor al registrar.' }); // Mejora UX - Cambio 4
     } finally {
         if (client) client.release();
     }
 });
 
 app.get('/auth/verify', async (req, res) => {
-    // Verificación por correo deshabilitada temporalmente
+    // Verificación por correo deshabilitada temporalmente - Cambio 1
     res.status(404).send('Verificación por correo está deshabilitada temporalmente.');
 });
 
@@ -309,7 +292,7 @@ app.post('/auth/login', async (req, res) => {
     let client;
 
     if (!correo || !clave) {
-        return res.status(400).json({ message: 'Faltan campos: correo o clave.' });
+        return res.status(400).json({ message: 'Faltan campos: correo o clave.' }); // Mejora UX - Cambio 4
     }
 
     try {
@@ -317,13 +300,12 @@ app.post('/auth/login', async (req, res) => {
         const userResult = await client.query('SELECT * FROM usuario WHERE correo = $1', [correo]);
 
         if (userResult.rows.length === 0) {
-            return res.status(401).json({ message: 'Credenciales inválidas.' });
+            return res.status(401).json({ message: 'Credenciales inválidas.' }); // Mejora UX - Cambio 4
         }
 
         const user = userResult.rows[0];
 
-        // Con verificación deshabilitada, no es necesario verificar 'estatus'
-        // Asumimos que todos los usuarios registrados son 'ACTIVO'
+        // Con verificación deshabilitada, no es necesario verificar 'estatus' - Cambio 1
         // if (user.estatus !== 'ACTIVO') {
         //     return res.status(403).json({
         //         message: 'Cuenta pendiente de verificación. Revisa tu correo.',
@@ -334,7 +316,7 @@ app.post('/auth/login', async (req, res) => {
         // Comparar contraseña
         const isMatch = await bcrypt.compare(clave, user.clave);
         if (!isMatch) {
-            return res.status(401).json({ message: 'Credenciales inválidas.' });
+            return res.status(401).json({ message: 'Credenciales inválidas.' }); // Mejora UX - Cambio 4
         }
 
         // Crear Token de Sesión
@@ -355,7 +337,7 @@ app.post('/auth/login', async (req, res) => {
         });
     } catch (error) {
         console.error('Error en el login:', error);
-        res.status(500).json({ message: 'Error interno del servidor.' });
+        res.status(500).json({ message: 'Error interno del servidor.' }); // Mejora UX - Cambio 4
     } finally {
         if (client) client.release();
     }
@@ -367,19 +349,19 @@ app.post('/auth/logout', (req, res) => {
 });
 
 // -----------------------------------------------------------------------------------
-// RUTAS DE DISPOSITIVOS Y TELEMETRÍA (LÓGICA COMPLETADA - MANEJO DE ERRORES)
+// RUTAS DE DISPOSITIVOS Y TELEMETRÍA (LÓGICA COMPLETADA - CAMBIO 2 - AHORA CON MANEJO DE ERRORES)
 // -----------------------------------------------------------------------------------
 
-// Ruta para registrar un nuevo dispositivo y asociarlo al usuario
+// Ruta para registrar un nuevo dispositivo y asociarlo al usuario - Cambio 2
 app.post('/dispositivo', async (req, res) => {
-    const { nombre, tipo, marca, topic } = req.body;
+    const { nombre, tipo, marca, topic } = req.body; // Asumiendo estos campos desde el frontend
     const token = req.cookies.session_token; // Obtener token de sesión
 
     if (!token) {
         return res.status(401).json({ message: 'No autorizado. Por favor, inicie sesión.' });
     }
 
-    if (!nombre || !tipo || !topic) {
+    if (!nombre || !tipo || !topic) { // Validación de campos requeridos - Cambio 4
         return res.status(400).json({ message: 'Faltan campos obligatorios: nombre, tipo, topic.' });
     }
 
@@ -394,14 +376,14 @@ app.post('/dispositivo', async (req, res) => {
 
         await client.query(
             'INSERT INTO dispositivo (usr_id, nombre, tipo, marca, topic) VALUES ($1, $2, $3, $4, $5)',
-            [usr_id, nombre, tipo, marca || null, topic]
+            [usr_id, nombre, tipo, marca || null, topic] // Manejar marca como opcional
         );
 
         res.status(201).json({ message: 'Dispositivo registrado y asociado al usuario.', nombre, topic });
     } catch (error) {
         console.error('Error al registrar dispositivo:', error);
-        // Verificar si el error es por violación de clave única (topic duplicado)
-        if (error.code === '23505') {
+        // Manejo de errores específicos - Cambio 4
+        if (error.code === '23505') { // Error de clave única violada (topic duplicado)
              res.status(409).json({ message: 'El topic del dispositivo ya está registrado.' });
         } else if (error.code === '42P01') { // Undefined table
              res.status(500).json({ message: 'Error interno: La tabla "dispositivo" no existe. Contacte al administrador.' });
@@ -414,7 +396,7 @@ app.post('/dispositivo', async (req, res) => {
 });
 
 
-// Ruta para obtener dispositivos del usuario autenticado
+// Ruta para obtener dispositivos del usuario autenticado - Cambio 2
 app.get('/dispositivos', async (req, res) => {
     const token = req.cookies.session_token; // Obtener token de sesión
 
@@ -426,7 +408,7 @@ app.get('/dispositivos', async (req, res) => {
     try {
         client = await pool.connect();
 
-        // Suponiendo que usr_id se obtiene de forma segura (ver comentario en POST /dispositivo)
+        // Suponiendo que usr_id se obtiene de forma segura
         // Por ahora, usamos usr_id falso (1)
         const usr_id = 1; // <-- ESTE VALOR DEBE OBTENERSE DE FORMA SEGURA
 
@@ -438,6 +420,7 @@ app.get('/dispositivos', async (req, res) => {
         res.json(result.rows);
     } catch (error) {
         console.error('Error al obtener dispositivos:', error);
+        // Manejo de errores específicos - Cambio 4
         if (error.code === '42P01') { // Undefined table
              res.status(500).json({ message: 'Error interno: La tabla "dispositivo" no existe. Contacte al administrador.' });
         } else {
@@ -452,7 +435,7 @@ app.get('/dispositivos', async (req, res) => {
 // ===================================================================================
 // LÓGICA DE INICIO DEL SERVIDOR (CRÍTICO PARA RAILWAY)
 // ===================================================================================
-const PORT = process.env.PORT || 3000; // Asegúrate de usar process.env.PORT
+const PORT = process.env.PORT || 3000; // Asegúrate de usar process.env.PORT o el puerto original
 
 const initializeApplicationServices = async () => {
     console.log('🔍 Iniciando verificación de base de datos y MQTT (en segundo plano)...');

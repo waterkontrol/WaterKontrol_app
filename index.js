@@ -44,7 +44,8 @@ const testDatabaseConnection = async () => {
     if (result.rows[0].db_connection_ok === 1) {
         console.log('✅ db connection ok');
     }
-    await initializeDatabase(client);
+    await initializeDatabase(client); // Llama a la inicialización principal
+    await ensureDispositivoTableExists(client); // Llama a la inicialización específica de dispositivos
     return true;
   } catch (error) {
     console.error('❌ Error crítico al conectar/verificar la DB:', error.message);
@@ -71,8 +72,31 @@ const initializeDatabase = async (client) => {
     } else {
         console.warn('⚠️ La tabla "usuario" puede necesitar ser creada o revisada.');
     }
-    // Nota: La creación de la tabla telemetria y dispositivo debería ser similar
+    // Nota: La creación de la tabla telemetria debería ser similar
 }
+
+// Nueva función para asegurar la existencia de la tabla 'dispositivo'
+const ensureDispositivoTableExists = async (client) => {
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS dispositivo (
+                id SERIAL PRIMARY KEY,
+                usr_id INTEGER, -- Clave foránea opcional para asociar al usuario
+                nombre VARCHAR(255) NOT NULL,
+                tipo VARCHAR(100),
+                marca VARCHAR(100),
+                topic VARCHAR(255) UNIQUE NOT NULL, -- El topic debería ser único
+                fecha_registro TIMESTAMP DEFAULT NOW()
+                -- CONSTRAINT fk_usuario FOREIGN KEY (usr_id) REFERENCES usuario(id)
+            );
+        `);
+        console.log('✅ Tabla "dispositivo" verificada o creada.');
+    } catch (error) {
+        console.error('❌ Error creando tabla "dispositivo":', error);
+        throw error; // Lanza el error para que lo maneje testDatabaseConnection
+    }
+}
+
 
 // ===================================================================================
 // LÓGICA DE AUTENTICACIÓN (VERIFICACIÓN COMENTADA)
@@ -212,6 +236,7 @@ app.use(express.static(path.join(__dirname, 'www')));
 // RUTAS DE LA API (ENDPOINT)
 // ===================================================================================
 app.get('/health', (req, res) => {
+    // Endpoint para healthcheck
     res.status(200).send({ status: 'OK', service: 'waterkontrol-backend' });
 });
 
@@ -367,47 +392,7 @@ app.post('/dispositivo', async (req, res) => {
     try {
         client = await pool.connect();
 
-        // Obtener el ID del usuario autenticado basado en el token de sesión
-        // NOTA: Esta implementación asume que el token de sesión es el ID del usuario o está mapeado a él.
-        // Una mejor práctica es almacenar la sesión en Redis o una tabla de sesiones.
-        // Por ahora, asumiremos que el token de sesión está relacionado con el usuario en alguna forma,
-        // o que el backend puede inferir el ID del usuario de otra manera (p. ej. vía JWT o una tabla de sesiones).
-        // PARA SIMPLIFICAR ESTE EJEMPLO: Vamos a *suponer* que podemos obtener el ID del usuario de una cookie adicional
-        // o que el frontend envía el ID del usuario explícitamente (menos seguro, pero funcional para este paso).
-        // Lo ideal es tener un middleware `verifySession` que decodifique el token y coloque `req.user` en la request.
-        // Dado que no tenemos eso, y la lógica de sesiones es compleja, lo haremos de forma básica por ahora.
-        // Supongamos que el token *es* el identificador único del usuario para este ejemplo simplificado.
-        // ESTO ES UN PUNTO CRÍTICO: La autenticación de sesión debería mapear el token a un usr_id.
-
-        // OPCIÓN 1: (No recomendada) El frontend envía el usr_id. Requiere confianza total.
-        // const { usr_id } = req.body;
-        // if (!usr_id) {
-        //     return res.status(400).json({ message: 'ID de usuario no proporcionado.' });
-        // }
-
-        // OPCIÓN 2: (Recomendada) Tener una tabla de sesiones o usar JWT con payload que incluya usr_id
-        // Para este ejemplo, *no* implementaremos una tabla de sesiones completa.
-        // Supondremos que el backend puede obtener el usr_id del token de alguna manera interna o que el token es suficientemente seguro.
-        // La forma correcta es: Middleware que verifica `session_token` y extrae `usr_id`.
-        // Vamos a crear un middleware ficticio para ilustrar esto, pero no lo implementaremos completamente aquí para no alargar el código.
-
-        // Por ahora, vamos a *comentar* la parte de usr_id y dejarla pendiente de una implementación más robusta.
-        // La tabla 'dispositivo' debería tener una columna 'usr_id' para asociar el dispositivo al usuario.
-        // Creamos la tabla si no existe (esto debería hacerse en una migración, no aquí).
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS dispositivo (
-                id SERIAL PRIMARY KEY,
-                usr_id INTEGER NOT NULL, -- Asumiendo usr_id como clave foránea
-                nombre VARCHAR(255) NOT NULL,
-                tipo VARCHAR(100),
-                marca VARCHAR(100),
-                topic VARCHAR(255) UNIQUE NOT NULL, -- El topic debería ser único
-                fecha_registro TIMESTAMP DEFAULT NOW()
-                -- CONSTRAINT fk_usuario FOREIGN KEY (usr_id) REFERENCES usuario(id)
-            );
-        `);
-
-        // Suponiendo que usr_id se obtiene de forma segura (por ejemplo, decodificando el token o usando una tabla de sesiones)
+        // Suponiendo que usr_id se obtiene de forma segura (ver comentario en GET /dispositivos)
         // Por ahora, asignamos un usr_id falso (1) solo para probar la inserción.
         // ESTE ES EL PUNTO DONDE DEBE IMPLEMENTARSE LA OBTENCIÓN REAL DEL usr_id
         const usr_id = 1; // <-- ESTE VALOR DEBE OBTENERSE DE FORMA SEGURA (ver comentario arriba)
@@ -465,13 +450,15 @@ app.get('/dispositivos', async (req, res) => {
 // ===================================================================================
 // LÓGICA DE INICIO DEL SERVIDOR (CRÍTICO PARA RAILWAY)
 // ===================================================================================
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000; // Asegúrate de usar process.env.PORT
 
 const initializeApplicationServices = async () => {
     console.log('🔍 Iniciando verificación de base de datos y MQTT (en segundo plano)...');
     const dbConnected = await testDatabaseConnection();
     if (!dbConnected) {
         console.error('❌ No se pudo conectar a la base de datos. Las funciones de autenticación y DB fallarán.');
+        // Opcional: Podrías decidir no iniciar MQTT si la DB falla
+        // return;
     } else {
         try {
             // Iniciar MQTT solo si la conexión a BD fue exitosa

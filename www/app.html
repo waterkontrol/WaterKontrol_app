@@ -52,13 +52,13 @@
             font-size: 1em;
         }
         #addButton {
-            background-color: #28a745; 
+            background-color: #28a745;
             margin-right: 10px;
             width: auto;
             padding: 8px 15px;
         }
         #logoutButton {
-            background-color: #dc3545; 
+            background-color: #dc3545;
             width: auto;
             padding: 8px 15px;
         }
@@ -71,6 +71,14 @@
             padding: 20px;
             font-size: 1.1em;
         }
+        .error-message {
+            color: red;
+            font-weight: bold;
+        }
+        .success-message {
+            color: green;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -81,55 +89,65 @@
             <button id="logoutButton">Cerrar Sesión</button>
         </div>
     </div>
-    
     <div class="device-list-container">
         <h2>Mis Dispositivos Registrados</h2>
         <p id="loadingMessage">Cargando dispositivos...</p>
         <div id="deviceList">
-            </div>
+            <!-- Dispositivos se cargarán aquí -->
+        </div>
+        <p id="errorMessage" class="error-message" style="display: none;"></p>
     </div>
-
     <script>
         document.addEventListener('DOMContentLoaded', loadDevices);
 
         async function loadDevices() {
             const deviceList = document.getElementById('deviceList');
             const loadingMessage = document.getElementById('loadingMessage');
+            const errorMessage = document.getElementById('errorMessage');
+
             deviceList.innerHTML = '';
             loadingMessage.textContent = 'Cargando...';
+            loadingMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
 
             try {
-                // Obtener dispositivos desde el backend (ruta de ejemplo)
-                const response = await fetch('/dispositivos'); 
-                
+                // Obtener dispositivos desde el backend
+                const response = await fetch('/dispositivos');
                 if (!response.ok) {
-                    throw new Error('No se pudo obtener la lista de dispositivos.');
+                    if (response.status === 401) {
+                        // Si no está autorizado, redirigir al login
+                        window.location.href = '/';
+                        return;
+                    }
+                    throw new Error(`Error del servidor: ${response.status} - ${response.statusText}`);
                 }
-
                 const devices = await response.json();
 
-                if (devices.length === 0) {
-                    loadingMessage.textContent = 'No tienes dispositivos registrados. Usa el botón "Añadir Dispositivo".';
-                    loadingMessage.style.color = '#007bff';
-                    return;
-                }
-                
                 loadingMessage.style.display = 'none';
 
+                if (devices.length === 0) {
+                    const noDeviceMessage = document.createElement('p');
+                    noDeviceMessage.textContent = 'No tienes dispositivos registrados. Usa el botón "Añadir Dispositivo".';
+                    noDeviceMessage.style.color = '#007bff';
+                    noDeviceMessage.style.fontWeight = 'bold';
+                    deviceList.appendChild(noDeviceMessage);
+                    return;
+                }
+
                 devices.forEach(device => {
-                    // Lógica para determinar el estado visual
-                    const isActive = device.estatus === 'ACTIVO';
+                    // Lógica para determinar el estado visual (ejemplo simple)
+                    // Supongamos que hay un campo 'estatus' en la respuesta
+                    const isActive = device.estatus === 'ACTIVO'; // Asumiendo que el backend lo devuelve
                     const statusText = isActive ? 'ACTIVO' : 'INACTIVO';
                     const statusColor = isActive ? '#28a745' : '#dc3545'; // Verde o Rojo
 
                     const card = document.createElement('div');
                     card.className = 'device-card';
                     card.style.borderLeftColor = statusColor;
-
                     card.innerHTML = `
                         <div class="device-info">
                             <h2>${device.nombre}</h2>
-                            <p><strong>Tipo:</strong> ${device.tipo} | <strong>Marca:</strong> ${device.marca || 'N/A'}</p>
+                            <p><strong>Tipo:</strong> ${device.tipo || 'N/A'} | <strong>Marca:</strong> ${device.marca || 'N/A'}</p>
                             <p><strong>Topic MQTT:</strong> ${device.topic}</p>
                         </div>
                         <div class="device-status" style="color: ${statusColor};">
@@ -138,11 +156,11 @@
                     `;
                     deviceList.appendChild(card);
                 });
-
             } catch (error) {
                 console.error('Error al cargar dispositivos:', error);
-                loadingMessage.textContent = '❌ Error al cargar los dispositivos. Intente recargar la página.';
-                loadingMessage.style.color = 'red';
+                loadingMessage.style.display = 'none';
+                errorMessage.textContent = `❌ Error al cargar los dispositivos: ${error.message}`;
+                errorMessage.style.display = 'block';
             }
         }
 
@@ -154,12 +172,14 @@
                 });
                 if (response.ok) {
                     // El servidor ya borró la cookie, solo redirigimos
-                    window.location.href = '/'; 
+                    window.location.href = '/';
                 } else {
-                    alert('Error al cerrar la sesión.');
+                    // Mostrar error si logout falla
+                    alert('Error al cerrar la sesión. Intente nuevamente.');
                 }
             } catch (error) {
                 console.error('Error de red al cerrar sesión:', error);
+                alert('Error de red al intentar cerrar la sesión.');
             }
         });
     </script>

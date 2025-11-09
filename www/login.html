@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WaterKontrol – Iniciar sesión</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="auth-container">
+    <h2>Iniciando Sesión...</h2>
+    <p>El login ha sido desactivado temporalmente para pruebas.</p>
+    <a href="/app.html" style="color: blue;">Continuar a la aplicación</a>
+  </div>
+
+  <script>
+    // CRÍTICO: Redirección automática para evitar el paso de login
+    window.onload = function() {
+        setTimeout(() => {
+            window.location.href = '/app.html';
+        }, 500); // Pequeña pausa para ver el mensaje
+    };
+  </script>
+</body>
+</html>

@@ -1,93 +1,172 @@
-// URL de tu API de Node.js en Railway
-const RAILWAY_API_URL = "https://waterkontrolapp-production.up.railway.app"; // Asegúrate de que sea la correcta
+const RAILWAY_API_URL = 'https://waterkontrolapp-production.up.railway.app';
 
-// Asignar listeners
-document.getElementById('config-form').addEventListener('submit', sendCredentialsToDevice);
-const messageElement = document.getElementById('messageElement');
+const configForm = document.getElementById('config-form');
+const scanButton = document.getElementById('scan-wifi-btn');
+const submitButton = document.getElementById('submitButton');
+const messageElement = document.getElementById('message');
+const ssidSelect = document.getElementById('ssid');
+const manualSsidInput = document.getElementById('manual-ssid');
 
-// 1. Función para enviar credenciales al dispositivo (Asumiendo que el dispositivo está en modo AP en 192.168.4.1)
-async function sendCredentialsToDevice(e) {
-    e.preventDefault();
-    const submitButton = document.getElementById('submitButton');
-    submitButton.disabled = true;
-    showMessage("info", "Enviando credenciales al dispositivo...", "#007bff");
+scanButton.addEventListener('click', scanWifi);
+configForm.addEventListener('submit', sendCredentialsToDevice);
 
-    const ssid = document.getElementById('ssid').value;
-    const password = document.getElementById('password').value;
-    const device_name = document.getElementById('device_name').value;
-    const device_type = document.getElementById('device_type').value;
-    const device_brand = document.getElementById('device_brand').value;
-    // Generar un topic único para el dispositivo (esto debería hacerse de forma más robusta)
-    const unique_id = Math.random().toString(36).substring(2, 10); // ID temporal simple
-    const topic = `dispositivos/${unique_id}/telemetria`;
+// Mapeo de números de serie a datos del dispositivo (ajustar según tus dispositivos)
+const deviceDataMap = {
+  "WKM-0001": { modelo: "Medidor pH/Temp", tipo: "Medidor", marca: "WaterKontrol" },
+  "WKM-0002": { modelo: "Controlador Bomba", tipo: "Actuador", marca: "WaterKontrol" }
+};
 
-    try {
-        // A) ENVIAR CONFIGURACIÓN AL DISPOSITIVO ESP32 (Lógica Local, IP Fija)
-        // NOTA: 192.168.4.1 es la IP por defecto de un ESP32/ESP8266 cuando está en modo AP.
-        const deviceResponse = await fetch('http://192.168.4.1/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                wifi_ssid: ssid,
-                wifi_pass: password,
-                // Enviar la URL real del broker MQTT, no la API URL
-                mqtt_broker: process.env.MQTT_BROKER_URL || "mqtt://broker.emqx.io/", // CORREGIDO: Debe ser la URL del broker MQTT
-                mqtt_topic: topic
-            })
+// =================================================================
+// 1. FUNCIÓN PARA ESCANEAR REDES WI-FI
+// =================================================================
+async function scanWifi() {
+  ssidSelect.innerHTML = '<option value="">-- Selecciona una Red --</option>';
+  showMessage("info", "📶 Escaneando redes Wi-Fi... (Esta función requiere la app nativa para Android)", "blue");
+  scanButton.disabled = true;
+
+  // Lógica para entorno nativo (usando el plugin Hotspot)
+  if (window.plugins && window.plugins.Hotspot) {
+    window.plugins.Hotspot.scanWifi(
+      (networks) => { // Función de éxito
+        networks.forEach(network => {
+          const option = document.createElement('option');
+          // El plugin puede devolver SSID o ssid, usamos ambos por seguridad
+          option.value = network.SSID || network.ssid; 
+          option.textContent = network.SSID || network.ssid;
+          ssidSelect.appendChild(option);
         });
-
-        if (!deviceResponse.ok) {
-            // Este error se lanza si el ESP32 devuelve un status 4xx/5xx
-            throw new Error(`Error en la configuración local del dispositivo (Status: ${deviceResponse.status}).`);
-        }
-
-        // El dispositivo aceptó la configuración, ahora intentará conectarse a la red doméstica y al broker.
-        showMessage("success", "✅ Configuración enviada al dispositivo. Intentando registrar en la plataforma...", "#28a745");
-
-        // B) REGISTRAR EL DISPOSITIVO EN TU API DE RAILWAY
-        // NOTA: Aquí es donde se debe enviar el usr_id. Por ahora, se envía un usr_id falso (1).
-        // ESTE ES EL PUNTO CRÍTICO: La obtención real del usr_id desde el frontend requiere un backend robusto.
-        // Para este ejemplo, supondremos que el usr_id es 1 (ver index.js).
-        const registerResponse = await fetch(`${RAILWAY_API_URL}/dispositivo`, {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({
-                 // usr_id: 'OBTENER_DE_SESION', // <-- ESTO ES LO IDEAL PERO COMPLEJO SIN JWT/Sesiones
-                 nombre: device_name,
-                 tipo: device_type,
-                 marca: device_brand || null,
-                 topic: topic
-             })
-        });
-
-        if (registerResponse.ok) {
-             const registerData = await registerResponse.json();
-             showMessage("success",
-                `✅ Dispositivo "${registerData.nombre}" registrado en la plataforma con topic "${registerData.topic}". Redirigiendo...`,
-                "#28a745");
-             // Opcional: Redirigir después de unos segundos
-             setTimeout(() => {
-                 window.location.href = '/app.html';
-             }, 3000);
-        } else {
-             const errorData = await registerResponse.json();
-             showMessage("error",
-                `❌ Error al registrar el dispositivo en la plataforma: ${errorData.message || 'Error desconocido'}`,
-                "#dc3545");
-        }
-
-    } catch (error) {
-        // Este error es muy común si la IP no es accesible (no conectado al AP del dispositivo)
-        showMessage("error",
-            `❌ Error de conexión: ${error.message}. Asegúrate de que tu celular/PC esté **conectado a la red Wi-Fi temporal del dispositivo** (ej: WaterKontrol-AP) para enviar las credenciales.`,
-            "#dc3545");
-    }
-    submitButton.disabled = false;
+        showMessage("success", `✅ Se encontraron ${networks.length} redes.`, "green");
+        scanButton.disabled = false;
+      },
+      (error) => { // Función de error
+        showMessage("error", `❌ Error al escanear redes: ${error}`, "red");
+        scanButton.disabled = false;
+      }
+    );
+  } else {
+    // Datos de prueba (Mock data) para probar en el navegador
+    setTimeout(() => {
+      const mockNetworks = [
+        { SSID: "Mi_WiFi_Hogar", ssid: "Mi_WiFi_Hogar" },
+        { SSID: "Red_Vecino", ssid: "Red_Vecino" },
+        { SSID: "WaterKontrol-AP", ssid: "WaterKontrol-AP" } // AP del dispositivo
+      ];
+      mockNetworks.forEach(network => {
+        const option = document.createElement('option');
+        option.value = network.SSID || network.ssid;
+        option.textContent = network.SSID || network.ssid;
+        ssidSelect.appendChild(option);
+      });
+      showMessage("warning", `⚠️ Usando datos de prueba. Se encontraron ${mockNetworks.length} redes.`, "orange");
+      scanButton.disabled = false;
+    }, 1500);
+  }
 }
 
-function showMessage(type, content, bgColor) {
+// =================================================================
+// 2. FUNCIÓN PARA ENVIAR CREDENCIALES
+// =================================================================
+async function sendCredentialsToDevice(e) {
+  e.preventDefault();
+  submitButton.disabled = true;
+
+  const selectedSsid = ssidSelect.value;
+  const manualSsid = manualSsidInput.value.trim();
+  // El SSID a usar es el manual si se llenó, si no, el del select.
+  const ssid = manualSsid || selectedSsid; 
+  const password = document.getElementById('password').value;
+  const serie = document.getElementById('serie').value.toUpperCase().trim();
+
+  if (!ssid || !password || !serie) {
+    showMessage("error", "Todos los campos son obligatorios.", "red");
+    submitButton.disabled = false;
+    return;
+  }
+
+  // Verificar que el número de serie sea conocido
+  const deviceData = deviceDataMap[serie];
+  if (!deviceData) {
+    showMessage("error", `❌ Número de serie desconocido: ${serie}. Por favor, verifica el número.`, "red");
+    submitButton.disabled = false;
+    return;
+  }
+  
+  // Generar el topic MQTT dinámicamente con la serie
+  const topic = `dispositivos/${serie}/telemetria`; 
+
+  showMessage("info", "➡️ Enviando credenciales al dispositivo...", "blue");
+
+  try {
+    // A) CONFIGURAR EL DISPOSITIVO (Paso 1: Comunicación local con el ESP32)
+    // CRÍTICO: 192.168.4.1 es la IP por defecto del dispositivo en modo AP.
+    const response = await fetch('http://192.168.4.1/config', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            wifi_ssid: ssid, 
+            wifi_pass: password, 
+            // Se envía la URL completa de Railway y el topic dinámico
+            mqtt_broker: RAILWAY_API_URL, 
+            mqtt_topic: topic 
+        })
+    });
+
+    if (!response.ok) {
+      // Si la respuesta del ESP32 no es OK, es un error local
+      showMessage("error", `❌ Error en la API local del dispositivo (Status: ${response.status}).`, "red");
+      submitButton.disabled = false;
+      return;
+    }
+
+    showMessage("info", "✅ Credenciales aceptadas. Registrando en la plataforma...", "blue");
+
+    // B) REGISTRAR EL DISPOSITIVO EN TU API DE RAILWAY (Paso 2: Comunicación con el backend)
+    const registerResponse = await fetch(`${RAILWAY_API_URL}/api/dispositivo/registro`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serie: serie,
+        modelo: deviceData.modelo,
+        tipo: deviceData.tipo,
+        marca: deviceData.marca,
+        topic: topic
+      })
+    });
+
+    if (registerResponse.ok) {
+      showMessage("success", "🎉 ¡Dispositivo configurado y registrado! Redirigiendo...", "green");
+      // Redirigir a la página principal tras un registro exitoso
+      setTimeout(() => window.location.href = '/app.html', 2000); 
+    } else {
+      // Manejar error de registro en la plataforma
+      const errorData = await registerResponse.json().catch(() => ({ message: 'Error desconocido' }));
+      showMessage("error", `❌ Error al registrar en la plataforma: ${errorData.message}`, "red");
+    }
+  } catch (error) {
+    // Este error es común si el celular/PC no está conectado al Wi-Fi del dispositivo
+    showMessage("error", `❌ Error de conexión: ${error.message}. Asegúrate de estar conectado al Wi-Fi del dispositivo.`, "red");
+  }
+
+  submitButton.disabled = false;
+}
+
+// Función de utilidad para mostrar mensajes en el DOM (reusa las clases de style.css)
+function showMessage(type, content, color) {
     messageElement.style.display = 'block';
+    messageElement.className = `message ${type}`;
     messageElement.textContent = content;
-    messageElement.style.backgroundColor = bgColor;
-    messageElement.style.color = 'white';
+    if (color) {
+        // Estilos custom para tipos 'info' y 'warning' que no tienen clase CSS propia.
+        if (type === 'info') {
+            messageElement.style.backgroundColor = '#cce5ff'; // Azul Claro
+            messageElement.style.color = '#004085'; // Azul Oscuro
+        } else if (type === 'warning') {
+            messageElement.style.backgroundColor = '#fff3cd'; // Amarillo Claro
+            messageElement.style.color = '#856404'; // Amarillo Oscuro
+        } else {
+            // Limpiar estilos si se usa una clase de CSS como 'success' o 'error'
+            messageElement.style.backgroundColor = ''; 
+            messageElement.style.color = '';
+        }
+    }
 }

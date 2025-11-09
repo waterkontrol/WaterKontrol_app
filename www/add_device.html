@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Añadir Dispositivo - WaterKontrol</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        /* Estilos específicos para esta página */
+        .header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+        }
+        .header h1 { margin: 0; font-size: 1.5em; }
+        .container {
+            padding: 20px;
+            max-width: 500px;
+            margin: 30px auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .message {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            display: none;
+            font-weight: bold;
+        }
+        .red { color: white; background-color: #dc3545; }
+        .green { color: white; background-color: #28a745; }
+        .blue { color: white; background-color: #007bff; }
+        #wifi-list-container {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        #wifi-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        #wifi-list li {
+            padding: 8px;
+            border-bottom: 1px dotted #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #wifi-list li:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Configurar Dispositivo WaterKontrol</h1>
+        <a href="/app.html" style="color: white; float: left; text-decoration: none;">< Volver</a>
+    </div>
+    <div class="container">
+        <h2>Paso 1: Conexión Local</h2>
+        <div class="message" id="messageElement"></div>
+        <p>Conecta tu teléfono/PC a la red Wi-Fi temporal del dispositivo WaterKontrol (ej: "WaterKontrol-AP").</p>
+        <h2>Paso 2: Enviar Credenciales</h2>
+        <form id="config-form">
+            <label for="ssid">SSID de tu Red Wi-Fi Doméstica:</label>
+            <input type="text" id="ssid" name="ssid" required placeholder="Nombre de tu red Wi-Fi (ej: MiCasa)">
+            <label for="password">Contraseña de tu Red Wi-Fi Doméstica:</label>
+            <input type="password" id="password" name="password" required placeholder="Contraseña de tu red Wi-Fi">
+            <label for="device_name">Nombre del Dispositivo:</label>
+            <input type="text" id="device_name" name="device_name" required placeholder="Ej: Tanque Principal">
+            <label for="device_type">Tipo de Dispositivo:</label>
+            <input type="text" id="device_type" name="device_type" required placeholder="Ej: Nivel">
+            <label for="device_brand">Marca del Dispositivo (Opcional):</label>
+            <input type="text" id="device_brand" name="device_brand" placeholder="Ej: WaterKontrol">
+            <button type="submit" id="submitButton">Enviar Configuración al Dispositivo</button>
+        </form>
+    </div>
+    <script src="/add_device_config.js"></script>
+</body>
+</html>

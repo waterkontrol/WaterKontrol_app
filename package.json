@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "mkdir -p www && cp -R public/. www",
     "build:local": "rimraf www && mkdir www && xcopy public www /E /I /Y",
     "cap:sync": "npm run build:local && npx cap sync",
     "cap:android": "npm run cap:sync && npx cap open android"
@@ -25,16 +26,17 @@
     "cordova-plugin-hotspot": "1.2.9",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "mqtt": "^5.14.1",
-    "nodemailer": "^6.1.0",
+    "nodemailer": "^6.10.1",
     "path": "^0.12.7",
     "pg": "^8.16.3"
   },
   "devDependencies": {
+    "tslib": "^2.6.3",
     "@capacitor/android": "6.2.1",
     "@capacitor/cli": "6.2.1",
-    "rimraf": "^5.0.10",
-    "tslib": "^2.6.3",
-    "@capacitor/core": "6.2.1"
+    "@capacitor/core": "6.2.1",
+    "rimraf": "^5.0.10"
   }
 }

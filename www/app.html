@@ -112,7 +112,7 @@
 
             try {
                 // Obtener dispositivos desde el backend
-                const response = await fetch('/dispositivos');
+                const response = await fetch('/api/dispositivos');
                 if (!response.ok) {
                     if (response.status === 401) {
                         // Si no está autorizado, redirigir al login

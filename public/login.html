@@ -8,18 +8,59 @@
 </head>
 <body>
   <div class="auth-container">
-    <h2>Iniciando Sesión...</h2>
-    <p>El login ha sido desactivado temporalmente para pruebas.</p>
-    <a href="/app.html" style="color: blue;">Continuar a la aplicación</a>
+    <h2>Iniciar sesión</h2>
+
+    <form id="loginForm">
+      <label for="correo">Correo</label>
+      <input type="email" id="correo" name="correo" required>
+
+      <label for="clave">Contraseña</label>
+      <input type="password" id="clave" name="clave" required>
+
+      <button type="submit">Entrar</button>
+      <p id="message" class="message"></p>
+    </form>
+
+    <div class="links">
+      <a href="/register.html">Crear cuenta</a>
+    </div>
   </div>
 
   <script>
-    // CRÍTICO: Redirección automática para evitar el paso de login
-    window.onload = function() {
-        setTimeout(() => {
-            window.location.href = '/app.html';
-        }, 500); // Pequeña pausa para ver el mensaje
-    };
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const message = document.getElementById('message');
+      message.textContent = 'Enviando...';
+      message.className = 'message';
+
+      const body = JSON.stringify({
+        correo: document.getElementById('correo').value.trim(),
+        clave: document.getElementById('clave').value
+      });
+
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          message.textContent = '✅ Redirigiendo...';
+          message.className = 'message success';
+          window.location.href = data.redirect;
+        } else {
+          message.textContent = data.message || 'Error desconocido';
+          message.className = 'message error';
+        }
+      } catch (err) {
+        console.error(err);
+        message.textContent = '❌ Error de red';
+        message.className = 'message error';
+      }
+    });
   </script>
 </body>
 </html>

@@ -143,7 +143,7 @@ app.post('/auth/logout', (req, res) => {
 // ===================================================================================
 
 // GET /api/dispositivos (Listar dispositivos del usuario)
-app.get('/api/dispositivos', isAuth, async (req, res) => {
+app.get('/api/dispositivos', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM dispositivos WHERE usuario_id = $1', [req.userId]);
         res.json(result.rows);

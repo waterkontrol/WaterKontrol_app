@@ -8,52 +8,18 @@
 </head>
 <body>
   <div class="auth-container">
-    <h2>Iniciar Sesión</h2>
-    <form id="loginForm">
-      <label for="correo">Correo:</label>
-      <input type="email" id="correo" name="correo" required placeholder="tu@correo.com">
-
-      <label for="clave">Contraseña:</label>
-      <input type="password" id="clave" name="clave" required placeholder="Tu contraseña">
-
-      <button type="submit">Ingresar</button>
-      <p id="message" style="margin-top: 15px;"></p>
-    </form>
-    <div class="links">
-      <a href="/register.html">Crear cuenta</a>
-    </div>
+    <h2>Iniciando Sesión...</h2>
+    <p>El login ha sido desactivado temporalmente para pruebas.</p>
+    <a href="/app.html" style="color: blue;">Continuar a la aplicación</a>
   </div>
 
   <script>
-    document.getElementById('loginForm').addEventListener('submit', async function (e) {
-      e.preventDefault();
-      const message = document.getElementById('message');
-      message.textContent = 'Iniciando sesión...';
-      message.style.color = 'blue';
-
-      const data = Object.fromEntries(new FormData(this).entries());
-
-      try {
-        const res = await fetch('/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-
-        const result = await res.json();
-        if (res.ok) {
-          message.textContent = '✅ Redirigiendo...';
-          message.style.color = 'green';
-          setTimeout(() => window.location.href = '/app.html', 1000);
-        } else {
-          message.textContent = result.message || 'Error desconocido';
-          message.style.color = 'red';
-        }
-      } catch (err) {
-        message.textContent = 'Error de red';
-        message.style.color = 'red';
-      }
-    });
+    // CRÍTICO: Redirección automática para evitar el paso de login
+    window.onload = function() {
+        setTimeout(() => {
+            window.location.href = '/app.html';
+        }, 500); // Pequeña pausa para ver el mensaje
+    };
   </script>
 </body>
 </html>

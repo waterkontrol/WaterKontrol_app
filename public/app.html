@@ -11,7 +11,8 @@
     <h1>Mis dispositivos</h1>
     <div>
       <a href="/add_device.html" class="btn btn-primary">➕ Añadir</a>
-      </div>
+      <button id="logoutBtn" class="btn btn-secondary">Cerrar Sesión</button>
+    </div>
   </header>
 
   <main class="container">
@@ -25,78 +26,43 @@
       const list = document.getElementById('deviceList');
 
       try {
-        // const res = await fetch('/api/dispositivos');
-        // console.log('Respuesta de /api/dispositivos 1:', JSON.stringify(res), res.ok);
+        const res = await fetch('/api/dispositivos', { credentials: 'include' });
+        if (!res.ok) throw new Error('No autorizado');
+        const devices = await res.json();
 
-         fetch('https://waterkontrolapp-production.up.railway.app/api/dispositivos')
-          .then(response => {
-            if (!response.ok) { // Check for successful HTTP status (200-299)
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json(); // Parse the JSON data
-          })
-          .then(data => {
-            // 'data' is now a JavaScript object
-            console.log(data);
-            
-            // Si el servidor regresó HTML, el error ocurre AQUÍ
-            const devices = data; 
+        loading.style.display = 'none';
 
-            loading.style.display = 'none';
+        if (!devices.length) {
+          list.innerHTML = '<p>No tienes dispositivos. <a href="/add_device.html">Añade el primero</a>.</p>';
+          return;
+        }
 
-            if (!devices.length) {
-              list.innerHTML = '<p>No tienes dispositivos. <a href="/add_device.html">Añade el primero</a>.</p>';
-              return;
-            }
-
-            list.innerHTML = devices.map(d => `
-              <div class="card ${d.estatus}">
-                <div>
-                  <strong>${d.modelo}</strong> (${d.serie})<br>
-                  <small>${d.tipo} – ${d.marca}</small><br>
-                  <small>Topic: ${d.topic}</small>
-                </div>
-                <span class="badge">${d.estatus}</span>
-              </div>
-            `).join('');
-          })
-          .catch(error => {
-            console.error('Error:', error);
-          });
-
-        // ❌ Línea Eliminada (o Comentada): if (!res.ok) throw new Error('No autorizado'); 
-        // Si el servidor envía HTML, res.ok será TRUE (Status 200), pero el JSON.parse fallará.
-        // Pero si el ensureAuthenticated está comentado en el backend, esto NO es necesario.
-
-        // if (!res.ok) { // Dejamos esto solo para manejar errores 40x si la API falla de otra forma
-        //    throw new Error('Error en la API de dispositivos'); 
-        // }
-
-        
+        list.innerHTML = devices.map(d => `
+          <div class="card ${d.estatus}">
+            <div>
+              <strong>${d.modelo}</strong> (${d.serie})<br>
+              <small>${d.tipo} – ${d.marca}</small><br>
+              <small>Topic: ${d.topic}</small>
+            </div>
+            <span class="badge">${d.estatus}</span>
+          </div>
+        `).join('');
       } catch (err) {
         loading.textContent = '❌ Error al cargar dispositivos: ' + err.message;
         console.error(err);
       }
     }
 
-    // Inicializar la carga
     loadDevices();
 
-    // Lógica para el botón de Cerrar Sesión (Comentada para pruebas sin login)
-    // document.getElementById('logoutBtn').addEventListener('click', async () => {
-    //     try {
-    //         const response = await fetch('/auth/logout', {
-    //             method: 'POST'
-    //         });
-    //         if (response.ok) {
-    //             window.location.href = '/login.html'; 
-    //         } else {
-    //             alert('Error al cerrar la sesión.');
-    //         }
-    //     } catch (error) {
-    //         console.error('Error de red al cerrar sesión:', error);
-    //     }
-    // });
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try {
+        const res = await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
+        if (res.ok) window.location.href = '/login.html';
+      } catch (err) {
+        alert('Error al cerrar sesión.');
+      }
+    });
   </script>
 </body>
 </html>

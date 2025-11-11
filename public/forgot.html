@@ -1,23 +1,50 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WaterKontrol - Recuperar Contraseña</title>
-    <link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaterKontrol - Recuperar Contraseña</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <div class="auth-container">
-        <h2>Recuperar Contraseña</h2>
-        <form action="/auth/forgot" method="POST">
-            <label for="correo">Correo:</label>
-            <input type="email" id="correo" name="correo" placeholder="Ingresa tu correo registrado" required>
+  <div class="auth-container">
+    <h2>Recuperar Contraseña</h2>
+    <form id="forgotForm">
+      <label for="correo">Correo:</label>
+      <input type="email" id="correo" name="correo" placeholder="Ingresa tu correo registrado" required>
 
-            <button type="submit">Enviar Enlace de Recuperación</button>
-        </form>
-        <div class="links">
-            <a href="/">Volver al Login</a>
-        </div>
+      <button type="submit">Enviar Enlace de Recuperación</button>
+      <p id="message" style="margin-top: 15px;"></p>
+    </form>
+    <div class="links">
+      <a href="/login.html">Volver al Login</a>
     </div>
-    </body>
+  </div>
+
+  <script>
+    document.getElementById('forgotForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const message = document.getElementById('message');
+      message.textContent = 'Enviando enlace...';
+      message.style.color = 'blue';
+
+      const data = Object.fromEntries(new FormData(this).entries());
+
+      try {
+        const res = await fetch('/auth/forgot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const result = await res.json();
+        message.textContent = result.message;
+        message.style.color = res.ok ? 'green' : 'red';
+      } catch (err) {
+        message.textContent = 'Error de red';
+        message.style.color = 'red';
+      }
+    });
+  </script>
+</body>
 </html>

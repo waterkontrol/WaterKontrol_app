@@ -25,36 +25,54 @@
       const list = document.getElementById('deviceList');
 
       try {
-        const res = await fetch('/api/dispositivos');
-        
+        // const res = await fetch('/api/dispositivos');
+        // console.log('Respuesta de /api/dispositivos 1:', JSON.stringify(res), res.ok);
+
+         fetch('https://waterkontrolapp-production.up.railway.app/api/dispositivos')
+          .then(response => {
+            if (!response.ok) { // Check for successful HTTP status (200-299)
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json(); // Parse the JSON data
+          })
+          .then(data => {
+            // 'data' is now a JavaScript object
+            console.log(data);
+            
+            // Si el servidor regresó HTML, el error ocurre AQUÍ
+            const devices = data; 
+
+            loading.style.display = 'none';
+
+            if (!devices.length) {
+              list.innerHTML = '<p>No tienes dispositivos. <a href="/add_device.html">Añade el primero</a>.</p>';
+              return;
+            }
+
+            list.innerHTML = devices.map(d => `
+              <div class="card ${d.estatus}">
+                <div>
+                  <strong>${d.modelo}</strong> (${d.serie})<br>
+                  <small>${d.tipo} – ${d.marca}</small><br>
+                  <small>Topic: ${d.topic}</small>
+                </div>
+                <span class="badge">${d.estatus}</span>
+              </div>
+            `).join('');
+          })
+          .catch(error => {
+            console.error('Error:', error);
+          });
+
         // ❌ Línea Eliminada (o Comentada): if (!res.ok) throw new Error('No autorizado'); 
         // Si el servidor envía HTML, res.ok será TRUE (Status 200), pero el JSON.parse fallará.
         // Pero si el ensureAuthenticated está comentado en el backend, esto NO es necesario.
 
-        if (!res.ok) { // Dejamos esto solo para manejar errores 40x si la API falla de otra forma
-           throw new Error('Error en la API de dispositivos'); 
-        }
+        // if (!res.ok) { // Dejamos esto solo para manejar errores 40x si la API falla de otra forma
+        //    throw new Error('Error en la API de dispositivos'); 
+        // }
 
-        // Si el servidor regresó HTML, el error ocurre AQUÍ
-        const devices = await res.json(); 
-
-        loading.style.display = 'none';
-
-        if (!devices.length) {
-          list.innerHTML = '<p>No tienes dispositivos. <a href="/add_device.html">Añade el primero</a>.</p>';
-          return;
-        }
-
-        list.innerHTML = devices.map(d => `
-          <div class="card ${d.estatus}">
-            <div>
-              <strong>${d.modelo}</strong> (${d.serie})<br>
-              <small>${d.tipo} – ${d.marca}</small><br>
-              <small>Topic: ${d.topic}</small>
-            </div>
-            <span class="badge">${d.estatus}</span>
-          </div>
-        `).join('');
+        
       } catch (err) {
         loading.textContent = '❌ Error al cargar dispositivos: ' + err.message;
         console.error(err);

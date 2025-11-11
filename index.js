@@ -309,7 +309,7 @@ const procesarMensajesMqtt = () => {
 const marcarOfflineSiNoReportan = async () => {
   try {
     await pool.query(`
-      UPDATE dispositivos
+      UPDATE dispositivo
       SET estatus = 'offline'
       WHERE estatus = 'online' AND ultima_conexion < NOW() - INTERVAL '5 minutes'
     `);

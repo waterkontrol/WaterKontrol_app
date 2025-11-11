@@ -1,187 +1,102 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>WaterKontrol - Mis Dispositivos</title>
-    <link rel="stylesheet" href="/style.css">
-    <style>
-        .header {
-            background-color: #007bff;
-            color: white;
-            padding: 15px 20px;
-            text-align: center;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 1.5em;
-        }
-        .device-list-container {
-            padding: 20px;
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        .device-card {
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 15px;
-            margin-bottom: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-left: 5px solid #007bff;
-        }
-        .device-info h2 {
-            margin-top: 0;
-            margin-bottom: 5px;
-            font-size: 1.2em;
-            color: #343a40;
-            border-bottom: none;
-            padding-bottom: 0;
-        }
-        .device-info p {
-            margin: 0;
-            font-size: 0.9em;
-            color: #6c757d;
-        }
-        .device-status {
-            font-weight: bold;
-            font-size: 1em;
-        }
-        #addButton {
-            background-color: #28a745;
-            margin-right: 10px;
-            width: auto;
-            padding: 8px 15px;
-        }
-        #logoutButton {
-            background-color: #dc3545;
-            width: auto;
-            padding: 8px 15px;
-        }
-        .buttons-container {
-            display: flex;
-            align-items: center;
-        }
-        #loadingMessage {
-            text-align: center;
-            padding: 20px;
-            font-size: 1.1em;
-        }
-        .error-message {
-            color: red;
-            font-weight: bold;
-        }
-        .success-message {
-            color: green;
-            font-weight: bold;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WaterKontrol – Mis dispositivos</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <div class="header">
-        <h1>WaterKontrol Dashboard</h1>
-        <div class="buttons-container">
-            <button id="addButton" onclick="window.location.href='/add_device.html';">Añadir Dispositivo</button>
-            <button id="logoutButton">Cerrar Sesión</button>
-        </div>
-    </div>
-    <div class="device-list-container">
-        <h2>Mis Dispositivos Registrados</h2>
-        <p id="loadingMessage">Cargando dispositivos...</p>
-        <div id="deviceList">
-            <!-- Dispositivos se cargarán aquí -->
-        </div>
-        <p id="errorMessage" class="error-message" style="display: none;"></p>
-    </div>
-    <script>
-        document.addEventListener('DOMContentLoaded', loadDevices);
+  <header class="topbar">
+    <h1>Mis dispositivos</h1>
+    <div>
+      <a href="/add_device.html" class="btn btn-primary">➕ Añadir</a>
+      </div>
+  </header>
 
-        async function loadDevices() {
-            const deviceList = document.getElementById('deviceList');
-            const loadingMessage = document.getElementById('loadingMessage');
-            const errorMessage = document.getElementById('errorMessage');
+  <main class="container">
+    <p id="loading">Cargando dispositivos...</p>
+    <div id="deviceList"></div>
+  </main>
 
-            deviceList.innerHTML = '';
-            loadingMessage.textContent = 'Cargando...';
-            loadingMessage.style.display = 'block';
-            errorMessage.style.display = 'none';
+  <script>
+    async function loadDevices() {
+      const loading = document.getElementById('loading');
+      const list = document.getElementById('deviceList');
 
-            try {
-                // Obtener dispositivos desde el backend
-                const response = await fetch('/api/dispositivos');
-                if (!response.ok) {
-                    if (response.status === 401) {
-                        // Si no está autorizado, redirigir al login
-                        window.location.href = '/';
-                        return;
-                    }
-                    throw new Error(`Error del servidor: ${response.status} - ${response.statusText}`);
-                }
-                const devices = await response.json();
+      try {
+        // const res = await fetch('/api/dispositivos');
+        // console.log('Respuesta de /api/dispositivos 1:', JSON.stringify(res), res.ok);
 
-                loadingMessage.style.display = 'none';
-
-                if (devices.length === 0) {
-                    const noDeviceMessage = document.createElement('p');
-                    noDeviceMessage.textContent = 'No tienes dispositivos registrados. Usa el botón "Añadir Dispositivo".';
-                    noDeviceMessage.style.color = '#007bff';
-                    noDeviceMessage.style.fontWeight = 'bold';
-                    deviceList.appendChild(noDeviceMessage);
-                    return;
-                }
-
-                devices.forEach(device => {
-                    // Lógica para determinar el estado visual (ejemplo simple)
-                    // Supongamos que hay un campo 'estatus' en la respuesta
-                    const isActive = device.estatus === 'ACTIVO'; // Asumiendo que el backend lo devuelve
-                    const statusText = isActive ? 'ACTIVO' : 'INACTIVO';
-                    const statusColor = isActive ? '#28a745' : '#dc3545'; // Verde o Rojo
-
-                    const card = document.createElement('div');
-                    card.className = 'device-card';
-                    card.style.borderLeftColor = statusColor;
-                    card.innerHTML = `
-                        <div class="device-info">
-                            <h2>${device.nombre}</h2>
-                            <p><strong>Tipo:</strong> ${device.tipo || 'N/A'} | <strong>Marca:</strong> ${device.marca || 'N/A'}</p>
-                            <p><strong>Topic MQTT:</strong> ${device.topic}</p>
-                        </div>
-                        <div class="device-status" style="color: ${statusColor};">
-                            ${statusText}
-                        </div>
-                    `;
-                    deviceList.appendChild(card);
-                });
-            } catch (error) {
-                console.error('Error al cargar dispositivos:', error);
-                loadingMessage.style.display = 'none';
-                errorMessage.textContent = `❌ Error al cargar los dispositivos: ${error.message}`;
-                errorMessage.style.display = 'block';
+         fetch('https://waterkontrolapp-production.up.railway.app/api/dispositivos')
+          .then(response => {
+            if (!response.ok) { // Check for successful HTTP status (200-299)
+              throw new Error(`HTTP error! status: ${response.status}`);
             }
-        }
+            return response.json(); // Parse the JSON data
+          })
+          .then(data => {
+            // 'data' is now a JavaScript object
+            console.log(data);
+            
+            // Si el servidor regresó HTML, el error ocurre AQUÍ
+            const devices = data; 
 
-        // Lógica para el botón de Cerrar Sesión
-        document.getElementById('logoutButton').addEventListener('click', async () => {
-            try {
-                const response = await fetch('/auth/logout', {
-                    method: 'POST'
-                });
-                if (response.ok) {
-                    // El servidor ya borró la cookie, solo redirigimos
-                    window.location.href = '/';
-                } else {
-                    // Mostrar error si logout falla
-                    alert('Error al cerrar la sesión. Intente nuevamente.');
-                }
-            } catch (error) {
-                console.error('Error de red al cerrar sesión:', error);
-                alert('Error de red al intentar cerrar la sesión.');
+            loading.style.display = 'none';
+
+            if (!devices.length) {
+              list.innerHTML = '<p>No tienes dispositivos. <a href="/add_device.html">Añade el primero</a>.</p>';
+              return;
             }
-        });
-    </script>
+
+            list.innerHTML = devices.map(d => `
+              <div class="card ${d.estatus}">
+                <div>
+                  <strong>${d.modelo}</strong> (${d.serie})<br>
+                  <small>${d.tipo} – ${d.marca}</small><br>
+                  <small>Topic: ${d.topic}</small>
+                </div>
+                <span class="badge">${d.estatus}</span>
+              </div>
+            `).join('');
+          })
+          .catch(error => {
+            console.error('Error:', error);
+          });
+
+        // ❌ Línea Eliminada (o Comentada): if (!res.ok) throw new Error('No autorizado'); 
+        // Si el servidor envía HTML, res.ok será TRUE (Status 200), pero el JSON.parse fallará.
+        // Pero si el ensureAuthenticated está comentado en el backend, esto NO es necesario.
+
+        // if (!res.ok) { // Dejamos esto solo para manejar errores 40x si la API falla de otra forma
+        //    throw new Error('Error en la API de dispositivos'); 
+        // }
+
+        
+      } catch (err) {
+        loading.textContent = '❌ Error al cargar dispositivos: ' + err.message;
+        console.error(err);
+      }
+    }
+
+    // Inicializar la carga
+    loadDevices();
+
+    // Lógica para el botón de Cerrar Sesión (Comentada para pruebas sin login)
+    // document.getElementById('logoutBtn').addEventListener('click', async () => {
+    //     try {
+    //         const response = await fetch('/auth/logout', {
+    //             method: 'POST'
+    //         });
+    //         if (response.ok) {
+    //             window.location.href = '/login.html'; 
+    //         } else {
+    //             alert('Error al cerrar la sesión.');
+    //         }
+    //     } catch (error) {
+    //         console.error('Error de red al cerrar sesión:', error);
+    //     }
+    // });
+  </script>
 </body>
 </html>

@@ -367,11 +367,23 @@ const procesarMensajesMqtt = () => {
 };
 
 // ===================================================================================
-// MARCAR DISPOSITIVOS OFFLINE
+// MARCAR DISPOSITIVOS OFFLINE (solo si existe la columna ultima_conexion)
 // ===================================================================================
 
 const marcarOfflineSiNoReportan = async () => {
   try {
+    // Verificar si existe la columna ultima_conexion
+    const columnCheck = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'dispositivo' AND column_name = 'ultima_conexion'
+    `);
+
+    if (columnCheck.rows.length === 0) {
+      console.warn('⚠️ Columna ultima_conexion no encontrada en tabla dispositivo. Saltando marcado offline.');
+      return;
+    }
+
     await pool.query(`
       UPDATE dispositivo
       SET estatus = 'offline'

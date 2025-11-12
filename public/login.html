@@ -38,14 +38,15 @@
         const res = await fetch('/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
+          body: JSON.stringify(data),
+          credentials: 'include'
         });
 
         const result = await res.json();
         if (res.ok) {
           message.textContent = '✅ Redirigiendo...';
           message.style.color = 'green';
-          setTimeout(() => window.location.href = '/app.html', 1000);
+          setTimeout(() => window.location.href = '/', 1000);
         } else {
           message.textContent = result.message || 'Error desconocido';
           message.style.color = 'red';

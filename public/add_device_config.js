@@ -53,6 +53,11 @@ async function sendCredentialsToDevice(e) {
       showMessage('success', '🎉 ¡Dispositivo configurado y registrado! Redirigiendo...', 'green');
       setTimeout(() => window.location.href = '/app.html', 2000);
     } else {
+      if (registerResponse.status === 401) {
+        showMessage('error', '❌ No autorizado. Por favor, inicia sesión.', 'red');
+        setTimeout(() => window.location.href = '/login.html', 1500);
+        return;
+      }
       const errorData = await registerResponse.json().catch(() => ({ message: 'Error desconocido' }));
       showMessage('error', `❌ Error al registrar en la plataforma: ${errorData.message}`, 'red');
     }

@@ -27,9 +27,15 @@
 
       try {
         const res = await fetch('/api/dispositivos', { credentials: 'include' });
-        if (!res.ok) throw new Error('No autorizado');
-        const devices = await res.json();
+        if (!res.ok) {
+          if (res.status === 401) {
+            window.location.href = '/login.html';
+            return;
+          }
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
 
+        const devices = await res.json();
         loading.style.display = 'none';
 
         if (!devices.length) {

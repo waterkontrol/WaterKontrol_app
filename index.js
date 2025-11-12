@@ -253,7 +253,7 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
   }
 });
 
-// POST /api/dispositivo/registro (Endpoint para el frontend de add_device_config.js)
+// POST /api/dispositivo/registro (Registrar dispositivo)
 app.post('/api/dispositivo/registro', isAuth, async (req, res) => {
   const { serie, modelo, tipo, marca, topic } = req.body;
   if (!serie || !modelo || !tipo || !topic) {
@@ -404,10 +404,23 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-app.get('/', (req, res) => {
-  if (req.cookies.session_token) {
+app.get('/', async (req, res) => {
+  const token = req.cookies.session_token;
+  if (!token) return res.sendFile(path.join(__dirname, 'www', 'login.html'));
+
+  try {
+    const result = await pool.query(
+      'SELECT 1 FROM sesiones WHERE token = $1 AND expira_en > NOW()',
+      [token]
+    );
+    if (result.rows.length === 0) {
+      res.clearCookie('session_token');
+      return res.sendFile(path.join(__dirname, 'www', 'login.html'));
+    }
     res.sendFile(path.join(__dirname, 'www', 'app.html'));
-  } else {
+  } catch (err) {
+    console.error('Error al validar cookie:', err);
+    res.clearCookie('session_token');
     res.sendFile(path.join(__dirname, 'www', 'login.html'));
   }
 });

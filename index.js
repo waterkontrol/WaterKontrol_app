@@ -164,14 +164,14 @@ app.post('/auth/login', async (req, res) => {
     }
 
     const token = crypto.randomBytes(32).toString('hex');
-    sessionStorage.setItem('token', token);
+    
     await pool.query(
       'INSERT INTO sesion (token, usuario_id, expira_en) VALUES ($1, $2, NOW() + INTERVAL \'7 days\')',
       [token, user.usr_id]
     );
 
-    res.cookie('session_token', token, { httpOnly: true, secure: isProduction, sameSite: 'Lax' });
-    return res.status(200).json({ message: 'Inicio de sesión exitoso.' });
+    // res.cookie('session_token', token, { httpOnly: true, secure: isProduction, sameSite: 'Lax' });
+    return res.status(200).json({ message: 'Inicio de sesión exitoso.', token: token });
   } catch (error) {
     console.error('Error al iniciar sesión:', error);
     return res.status(500).json({ message: 'Error interno del servidor.' });

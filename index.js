@@ -22,7 +22,7 @@ app.use(cookieParser());
 
 // ✅ CORS explícito para evitar bloqueos en frontend
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  // res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
@@ -85,7 +85,7 @@ connectMqtt();
 
 const isAuth = (req, res, next) => {
   const token = req.cookies.session_token;
-  console.log('🔐 Verificando token de sesión:', token);
+  console.log('🔐 Verificando token de sesión:', req);
   // if (!token) {
   //   return res.status(401).send({ message: 'No autorizado. Inicie sesión.', redirect: '/login.html' });
   // }
@@ -164,6 +164,7 @@ app.post('/auth/login', async (req, res) => {
     }
 
     const token = crypto.randomBytes(32).toString('hex');
+    sessionStorage.setItem('token', token);
     await pool.query(
       'INSERT INTO sesion (token, usuario_id, expira_en) VALUES ($1, $2, NOW() + INTERVAL \'7 days\')',
       [token, user.usr_id]
@@ -347,7 +348,7 @@ const procesarMensajesMqtt = () => {
         UPDATE dispositivo
         SET 
           ultima_conexion = $1, 
-          estatus = 'online',
+          estatus = 'A',
           ultimos_valores = jsonb_build_object('temperatura', $2, 'ph', $3)
         WHERE dispositivo_id = $4;
       `;

@@ -88,25 +88,36 @@ connectMqtt();
 // ===================================================================================
 
 const isAuth = (req, res, next) => {
-  const token = req.cookies.session_token;
-  console.log('🔐 Verificando token de sesión:', req);
-  // if (!token) {
-  //   return res.status(401).send({ message: 'No autorizado. Inicie sesión.', redirect: '/login.html' });
-  // }
+  const authHeader = req.headers['authorization'];
 
-  pool.query('SELECT usuario_id FROM sesion WHERE token = $1 AND expira_en > NOW()', [token])
-    .then(result => {
-      if (result.rows.length === 0) {
-        res.clearCookie('session_token');
-        return res.status(401).send({ message: 'Sesión expirada. Por favor, vuelva a iniciar sesión.', redirect: '/login.html' });
-      }
-      req.userId = result.rows[0].usuario_id;
-      next();
-    })
-    .catch(err => {
-      console.error('Error al verificar sesión:', err);
-      res.status(500).send({ message: 'Error interno del servidor.' });
-    });
+  if (authHeader) {
+    // Example for Bearer token: "Bearer <token_string>"
+    if (authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      // const token = req.cookies.session_token;
+      console.log('🔐 Verificando token de sesión:', req);
+      // if (!token) {
+      //   return res.status(401).send({ message: 'No autorizado. Inicie sesión.', redirect: '/login.html' });
+      // }
+
+      pool.query('SELECT usuario_id FROM sesion WHERE token = $1 AND expira_en > NOW()', [token])
+        .then(result => {
+          if (result.rows.length === 0) {
+            res.clearCookie('session_token');
+            return res.status(401).send({ message: 'Sesión expirada. Por favor, vuelva a iniciar sesión.', redirect: '/login.html' });
+          }
+          req.userId = result.rows[0].usuario_id;
+          next();
+        })
+        .catch(err => {
+          console.error('Error al verificar sesión:', err);
+          res.status(500).send({ message: 'Error interno del servidor.' });
+      });
+  } else {
+    res.status(401).send({ message: 'No autorizado. Inicie sesión.', redirect: '/login.html' });
+  }
+}
+
 };
 
 // ===================================================================================

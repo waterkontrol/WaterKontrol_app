@@ -85,9 +85,10 @@ connectMqtt();
 
 const isAuth = (req, res, next) => {
   const token = req.cookies.session_token;
-  if (!token) {
-    return res.status(401).send({ message: 'No autorizado. Inicie sesión.', redirect: '/login.html' });
-  }
+  console.log('🔐 Verificando token de sesión:', token);
+  // if (!token) {
+  //   return res.status(401).send({ message: 'No autorizado. Inicie sesión.', redirect: '/login.html' });
+  // }
 
   pool.query('SELECT usuario_id FROM sesion WHERE token = $1 AND expira_en > NOW()', [token])
     .then(result => {

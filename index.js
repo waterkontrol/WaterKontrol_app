@@ -29,7 +29,9 @@ app.use(cookieParser());
 //   if (req.method === 'OPTIONS') return res.sendStatus(200);
 //   next();
 // });
-app.use(cors({credentials: true}))
+app.use(cors({credentials: true,
+  origin: ['http://localhost: 8080', 'http://localhost: 8081', 'https://waterkontrolapp-production.up.railway.app']
+}))
 
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT

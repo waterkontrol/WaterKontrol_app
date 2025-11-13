@@ -267,7 +267,7 @@ app.post('/api/dispositivo/registro', isAuth, async (req, res) => {
 
     const insertQuery = `
       INSERT INTO dispositivo (serie, modelo, tipo, marca, topic, usuario_id, estatus, ultima_conexion)
-      VALUES ($1, $2, $3, $4, $5, $6, 'offline', NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, 'O', NOW())
       RETURNING dispositivo_id;
     `;
     const result = await client.query(insertQuery, [serie, modelo, tipo, marca, topic, req.userId]);
@@ -386,7 +386,7 @@ const marcarOfflineSiNoReportan = async () => {
 
     await pool.query(`
       UPDATE dispositivo
-      SET estatus = 'offline'
+      SET estatus = 'O'
       WHERE estatus = 'online' AND ultima_conexion < NOW() - INTERVAL '5 minutes'
     `);
   } catch (err) {

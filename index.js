@@ -89,7 +89,7 @@ const isAuth = (req, res, next) => {
     return res.status(401).send({ message: 'No autorizado. Inicie sesión.', redirect: '/login.html' });
   }
 
-  pool.query('SELECT usuario_id FROM sesiones WHERE token = $1 AND expira_en > NOW()', [token])
+  pool.query('SELECT usuario_id FROM sesion WHERE token = $1 AND expira_en > NOW()', [token])
     .then(result => {
       if (result.rows.length === 0) {
         res.clearCookie('session_token');
@@ -179,7 +179,7 @@ app.post('/auth/login', async (req, res) => {
 // POST /auth/logout
 app.post('/auth/logout', isAuth, async (req, res) => {
   const token = req.cookies.session_token;
-  await pool.query('DELETE FROM sesiones WHERE token = $1', [token]);
+  await pool.query('DELETE FROM sesion WHERE token = $1', [token]);
   res.clearCookie('session_token');
   res.status(200).json({ message: 'Sesión cerrada.' });
 });
@@ -410,7 +410,7 @@ app.get('/', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'SELECT 1 FROM sesiones WHERE token = $1 AND expira_en > NOW()',
+      'SELECT 1 FROM sesion WHERE token = $1 AND expira_en > NOW()',
       [token]
     );
     if (result.rows.length === 0) {

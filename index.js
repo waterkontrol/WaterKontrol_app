@@ -170,7 +170,7 @@ app.post('/auth/login', async (req, res) => {
       [token, user.usr_id]
     );
 
-    // res.cookie('session_token', token, { httpOnly: true, secure: isProduction, sameSite: 'Lax' });
+    res.cookie('session_token', token, { httpOnly: true, secure: isProduction, sameSite: 'Lax' });
     // res.status(200).json({ message: 'Inicio de sesión exitoso.', token: token }).send();
     res.send({ message: 'Inicio de sesión exitoso.', token: token });
   } catch (error) {

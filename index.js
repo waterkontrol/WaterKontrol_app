@@ -164,7 +164,7 @@ app.post('/auth/login', async (req, res) => {
 
     const token = crypto.randomBytes(32).toString('hex');
     await pool.query(
-      'INSERT INTO sesiones (token, usuario_id, expira_en) VALUES ($1, $2, NOW() + INTERVAL \'7 days\')',
+      'INSERT INTO sesion (token, usuario_id, expira_en) VALUES ($1, $2, NOW() + INTERVAL \'7 days\')',
       [token, user.usr_id]
     );
 

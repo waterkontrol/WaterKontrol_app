@@ -171,7 +171,8 @@ app.post('/auth/login', async (req, res) => {
     );
 
     // res.cookie('session_token', token, { httpOnly: true, secure: isProduction, sameSite: 'Lax' });
-    res.status(200).json({ message: 'Inicio de sesión exitoso.', token: token }).send();
+    // res.status(200).json({ message: 'Inicio de sesión exitoso.', token: token }).send();
+    res.send({ message: 'Inicio de sesión exitoso.', token: token });
   } catch (error) {
     console.error('Error al iniciar sesión:', error);
     return res.status(500).json({ message: 'Error interno del servidor.' });

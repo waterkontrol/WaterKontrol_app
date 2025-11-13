@@ -30,7 +30,7 @@ app.use(cookieParser());
 //   next();
 // });
 app.use(cors({credentials: true,
-  origin: ['http://localhost: 8080', 'http://localhost: 8081', 'https://waterkontrolapp-production.up.railway.app']
+  origin: ['http://localhost:8080', 'http://localhost:8081', 'https://waterkontrolapp-production.up.railway.app']
 }))
 
 // ===================================================================================

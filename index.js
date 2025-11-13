@@ -151,7 +151,7 @@ app.post('/auth/login', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT usuario_id, clave_hash FROM usuario WHERE correo = $1', [correo]);
+    const result = await pool.query('SELECT usr_id, clave FROM usuario WHERE correo = $1', [correo]);
     if (result.rows.length === 0) {
       return res.status(401).json({ message: 'Credenciales incorrectas.' });
     }
@@ -165,7 +165,7 @@ app.post('/auth/login', async (req, res) => {
     const token = crypto.randomBytes(32).toString('hex');
     await pool.query(
       'INSERT INTO sesiones (token, usuario_id, expira_en) VALUES ($1, $2, NOW() + INTERVAL \'7 days\')',
-      [token, user.usuario_id]
+      [token, user.usr_id]
     );
 
     res.cookie('session_token', token, { httpOnly: true, secure: isProduction, sameSite: 'Lax' });

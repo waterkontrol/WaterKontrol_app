@@ -170,7 +170,12 @@ app.post('/auth/login', async (req, res) => {
       [token, user.usr_id]
     );
 
-    res.cookie('session_token', token, { secure: true, SameSite: 'None', });
+    // res.cookie('session_token', token, { secure: true, SameSite: 'None', });
+
+    res.setHeader('Set-Cookie', [
+      'session_token='+token+'; SameSite=None; Secure; HttpOnly; Max-Age=3600'
+    ]);
+
     res.status(200).json({ message: 'Inicio de sesión exitoso.', token: token })
     // res.send({ message: 'Inicio de sesión exitoso.', token: token });
   } catch (error) {

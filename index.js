@@ -268,7 +268,8 @@ app.post('/auth/reset', async (req, res) => {
 // GET /api/dispositivos (Listar dispositivos del usuario)
 app.get('/api/dispositivos', isAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM dispositivo WHERE usuario_id = $1', [req.userId]);
+    // const result = await pool.query('SELECT * FROM dispositivo WHERE usuario_id = $1', [req.userId]);
+    const result = await pool.query('SELECT * FROM dispositivo');
     res.json(result.rows);
   } catch (err) {
     console.error('Error al obtener dispositivos:', err);

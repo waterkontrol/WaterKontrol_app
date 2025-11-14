@@ -35,27 +35,31 @@
       const data = Object.fromEntries(new FormData(this).entries());
 
       try {
-        const res = await fetch('/auth/login', {
+        const res = await fetch(`${RAILWAY_API_URL}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-          credentials: 'include'
+          body: JSON.stringify(data)
         });
 
         const result = await res.json();
+        console.log(result)
         if (res.ok) {
           message.textContent = '✅ Redirigiendo...';
           message.style.color = 'green';
+          sessionStorage.setItem('token', result.token);
           setTimeout(() => window.location.href = '/', 1000);
         } else {
           message.textContent = result.message || 'Error desconocido';
           message.style.color = 'red';
         }
       } catch (err) {
+        console.log(err);
+        
         message.textContent = 'Error de red';
         message.style.color = 'red';
       }
     });
   </script>
+  <script src="/variables.js"></script>
 </body>
 </html>

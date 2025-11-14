@@ -37,7 +37,7 @@
       const data = Object.fromEntries(new FormData(this).entries());
 
       try {
-        const res = await fetch('/auth/register', {
+        const res = await fetch(`${RAILWAY_API_URL}/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
@@ -58,5 +58,6 @@
       }
     });
   </script>
+  <script src="/variables.js"></script>
 </body>
 </html>

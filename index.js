@@ -146,7 +146,7 @@ app.post('/auth/register', async (req, res) => {
   try {
     const hashed = await bcrypt.hash(clave, saltRounds);
     const result = await pool.query(
-      'INSERT INTO usuarios (nombre, correo, clave_hash) VALUES ($1, $2, $3) RETURNING usuario_id',
+      'INSERT INTO usuario (nombre, correo, clave) VALUES ($1, $2, $3) RETURNING usuario_id',
       [nombre, correo, hashed]
     );
     res.status(201).json({ message: 'Usuario registrado exitosamente.' });
@@ -213,7 +213,7 @@ app.post('/auth/forgot', async (req, res) => {
   if (!correo) return res.status(400).json({ message: 'Falta el correo.' });
 
   try {
-    const user = await pool.query('SELECT usuario_id FROM usuarios WHERE correo = $1', [correo]);
+    const user = await pool.query('SELECT usuario_id FROM usuario WHERE correo = $1', [correo]);
     if (user.rows.length === 0) return res.status(200).json({ message: 'Si el correo existe, se enviará el enlace.' });
 
     const token = crypto.randomBytes(32).toString('hex');
@@ -222,7 +222,7 @@ app.post('/auth/forgot', async (req, res) => {
       [token, user.rows[0].usuario_id]
     );
 
-    const resetLink = `${process.env.APP_BASE_URL}/reset.html?token=${token}`;
+    const resetLink = `${RAILWAY_API_URL}/reset.html?token=${token}`;
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: correo,
@@ -251,7 +251,7 @@ app.post('/auth/reset', async (req, res) => {
 
     const usuarioId = result.rows[0].usuario_id;
     const hashed = await bcrypt.hash(nuevaClave, saltRounds);
-    await pool.query('UPDATE usuarios SET clave_hash = $1 WHERE usuario_id = $2', [hashed, usuarioId]);
+    await pool.query('UPDATE usuario SET clave = $1 WHERE usuario_id = $2', [hashed, usuarioId]);
     await pool.query('DELETE FROM reset_tokens WHERE token = $1', [token]);
 
     res.status(200).json({ message: 'Contraseña restablecida exitosamente.' });

@@ -1,0 +1,1 @@
+const RAILWAY_API_URL = 'https://waterkontrolapp-production.up.railway.app';

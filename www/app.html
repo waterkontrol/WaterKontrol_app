@@ -25,10 +25,14 @@
       const list = document.getElementById('deviceList');
 
       try {
-        // const res = await fetch('/api/dispositivos');
+        // const res = await fetch(`${RAILWAY_API_URL}/api/dispositivos`);
         // console.log('Respuesta de /api/dispositivos 1:', JSON.stringify(res), res.ok);
 
-         fetch('https://waterkontrolapp-production.up.railway.app/api/dispositivos')
+         fetch(`${RAILWAY_API_URL}/api/dispositivos`,
+          {
+            headers: {Authorization: 'Bearer ' + sessionStorage.getItem('token')}
+          }
+         )
           .then(response => {
             if (!response.ok) { // Check for successful HTTP status (200-299)
               throw new Error(`HTTP error! status: ${response.status}`);
@@ -85,7 +89,7 @@
     // Lógica para el botón de Cerrar Sesión (Comentada para pruebas sin login)
     // document.getElementById('logoutBtn').addEventListener('click', async () => {
     //     try {
-    //         const response = await fetch('/auth/logout', {
+    //         const response = await fetch(`${RAILWAY_API_URL}/auth/logout`, {
     //             method: 'POST'
     //         });
     //         if (response.ok) {
@@ -98,5 +102,6 @@
     //     }
     // });
   </script>
+  <script src="/variables.js"></script>
 </body>
 </html>

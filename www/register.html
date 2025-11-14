@@ -29,6 +29,9 @@
     </div>
 
     <script>
+
+
+
         document.getElementById('registerForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const messageElement = document.getElementById('message');
@@ -44,7 +47,7 @@
             const data = Object.fromEntries(formData.entries());
 
             try {
-                const response = await fetch('/auth/register', {
+                const response = await fetch(`${RAILWAY_API_URL}/auth/register`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -74,5 +77,6 @@
             }
         });
     </script>
+    <script src="/variables.js"></script>
 </body>
 </html>

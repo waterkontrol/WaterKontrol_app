@@ -26,7 +26,7 @@
       const list = document.getElementById('deviceList');
 
       try {
-        const res = await fetch('/api/dispositivos', { credentials: 'include' });
+        const res = await fetch(`${RAILWAY_API_URL}/api/dispositivos`, { credentials: 'include' });
         if (!res.ok) {
           if (res.status === 401) {
             window.location.href = '/login.html';
@@ -63,12 +63,13 @@
 
     document.getElementById('logoutBtn').addEventListener('click', async () => {
       try {
-        const res = await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
+        const res = await fetch(`${RAILWAY_API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
         if (res.ok) window.location.href = '/login.html';
       } catch (err) {
         alert('Error al cerrar sesión.');
       }
     });
   </script>
+  <script src="/variables.js"></script>
 </body>
 </html>

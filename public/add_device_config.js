@@ -44,8 +44,7 @@ async function sendCredentialsToDevice(e) {
 
     const registerResponse = await fetch(`${RAILWAY_API_URL}/api/dispositivo/registro`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', // ← Enviar cookies
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessionStorage.getItem('token') },
       body: JSON.stringify({ serie, modelo: device_name, tipo: device_type, marca: device_brand, topic })
     });
 

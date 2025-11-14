@@ -146,7 +146,7 @@ app.post('/auth/register', async (req, res) => {
   try {
     const hashed = await bcrypt.hash(clave, saltRounds);
     const result = await pool.query(
-      'INSERT INTO usuario (nombre, correo, clave) VALUES ($1, $2, $3) RETURNING usuario_id',
+      'INSERT INTO usuario (nombre, correo, clave) VALUES ($1, $2, $3) RETURNING usr_id',
       [nombre, correo, hashed]
     );
     res.status(201).json({ message: 'Usuario registrado exitosamente.' });

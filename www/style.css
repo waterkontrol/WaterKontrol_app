@@ -115,3 +115,11 @@ button:disabled {
     text-align: center;
     font-weight: bold;
 }
+
+.menu {
+  /* position: absolute; */
+  text-align: end;
+  width: 100%;
+  top: 0px;
+  right: 0px;
+}

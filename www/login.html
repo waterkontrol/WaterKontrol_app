@@ -21,9 +21,10 @@
     </form>
     <div class="links">
       <a href="/register.html">Crear cuenta</a>
+      <a href="/forgot.html">Olvidé mi contraseña</a>
     </div>
   </div>
-
+  <script src="/variables.js"></script>
   <script>
     document.getElementById('loginForm').addEventListener('submit', async function (e) {
       e.preventDefault();
@@ -53,11 +54,11 @@
         }
       } catch (err) {
         console.log(err);
+        
         message.textContent = 'Error de red';
         message.style.color = 'red';
       }
     });
   </script>
-  <script src="/variables.js"></script>
 </body>
 </html>

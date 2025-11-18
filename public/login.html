@@ -24,7 +24,7 @@
       <a href="/forgot.html">Olvidé mi contraseña</a>
     </div>
   </div>
-
+  <script src="/variables.js"></script>
   <script>
     document.getElementById('loginForm').addEventListener('submit', async function (e) {
       e.preventDefault();
@@ -47,7 +47,7 @@
           message.textContent = '✅ Redirigiendo...';
           message.style.color = 'green';
           sessionStorage.setItem('token', result.token);
-          setTimeout(() => window.location.href = '/', 1000);
+          setTimeout(() => window.location.href = '/app.html', 1000);
         } else {
           message.textContent = result.message || 'Error desconocido';
           message.style.color = 'red';
@@ -60,6 +60,5 @@
       }
     });
   </script>
-  <script src="/variables.js"></script>
 </body>
 </html>

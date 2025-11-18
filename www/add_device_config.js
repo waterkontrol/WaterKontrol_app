@@ -2,13 +2,10 @@ const RAILWAY_API_URL = 'https://waterkontrolapp-production.up.railway.app';
 
 const configForm = document.getElementById('config-form');
 const submitButton = document.getElementById('submitButton');
-const messageElement = document.getElementById('message');
+const messageElement = document.getElementById('messageElement');
 
 configForm.addEventListener('submit', sendCredentialsToDevice);
 
-// =================================================================
-// 1. FUNCIÓN PARA ENVIAR CREDENCIALES
-// =================================================================
 async function sendCredentialsToDevice(e) {
   e.preventDefault();
   submitButton.disabled = true;
@@ -34,12 +31,7 @@ async function sendCredentialsToDevice(e) {
     const response = await fetch('http://192.168.4.1/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        wifi_ssid: ssid,
-        wifi_pass: password,
-        mqtt_broker: RAILWAY_API_URL,
-        mqtt_topic: topic
-      })
+      body: JSON.stringify({ wifi_ssid: ssid, wifi_pass: password, mqtt_broker: RAILWAY_API_URL, mqtt_topic: topic })
     });
 
     if (!response.ok) {
@@ -53,19 +45,18 @@ async function sendCredentialsToDevice(e) {
     const registerResponse = await fetch(`${RAILWAY_API_URL}/api/dispositivo/registro`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessionStorage.getItem('token') },
-      body: JSON.stringify({
-        serie: serie,
-        modelo: device_name,
-        tipo: device_type,
-        marca: device_brand,
-        topic: topic
-      })
+      body: JSON.stringify({ serie, modelo: device_name, tipo: device_type, marca: device_brand, topic })
     });
 
     if (registerResponse.ok) {
       showMessage('success', '🎉 ¡Dispositivo configurado y registrado! Redirigiendo...', 'green');
       setTimeout(() => window.location.href = '/app.html', 2000);
     } else {
+      if (registerResponse.status === 401) {
+        showMessage('error', '❌ No autorizado. Por favor, inicia sesión.', 'red');
+        setTimeout(() => window.location.href = '/login.html', 1500);
+        return;
+      }
       const errorData = await registerResponse.json().catch(() => ({ message: 'Error desconocido' }));
       showMessage('error', `❌ Error al registrar en la plataforma: ${errorData.message}`, 'red');
     }
@@ -76,7 +67,6 @@ async function sendCredentialsToDevice(e) {
   submitButton.disabled = false;
 }
 
-// Función de utilidad para mostrar mensajes en el DOM
 function showMessage(type, content, color) {
   messageElement.style.display = 'block';
   messageElement.textContent = content;

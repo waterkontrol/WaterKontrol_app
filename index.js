@@ -22,16 +22,16 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // ✅ CORS explícito para evitar bloqueos en frontend
-// app.use((req, res, next) => {
-//   res.header('Access-Control-Allow-Origin', '*');
-//   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-//   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-//   if (req.method === 'OPTIONS') return res.sendStatus(200);
-//   next();
-// });
-app.use(cors({credentials: true,
-  origin: ['http://localhost:8080', 'http://localhost:8081', 'https://waterkontrolapp-production.up.railway.app']
-}))
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+// app.use(cors({credentials: true,
+//   origin: ['http://localhost:8080', 'http://localhost:8081', 'https://waterkontrolapp-production.up.railway.app']
+// }))
 
 // ===================================================================================
 // LÓGICA DE CONEXIÓN A LA BASE DE DATOS Y BCRYPT

@@ -280,7 +280,7 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
 // POST /api/dispositivo/registro (Registrar dispositivo)
 app.post('/api/dispositivo/registro', isAuth, async (req, res) => {
   const { serie, modelo, tipo, marca, topic } = req.body;
-  if (!serie || !modelo || !tipo || !topic) {
+  if (!serie || !modelo || !tipo) {
     return res.status(400).json({ message: 'Datos incompletos.' });
   }
 

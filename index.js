@@ -290,12 +290,12 @@ app.post('/api/dispositivo/registro', isAuth, async (req, res) => {
     await client.query('BEGIN');
 
     const insertQuery = `
-      INSERT INTO dispositivo (serie, modelo, tipo, marca, topic, usuario_id, estatus, ultima_conexion)
-      VALUES ($1, $2, $3, $4, $5, $6, 'O', NOW())
+      INSERT INTO dispositivo (serie, modelo, tipo, marca, estatus, fecha_creacion)
+      VALUES ($1, $2, $3, $4, 'A', NOW())
       RETURNING dispositivo_id;
     `;
-    const result = await client.query(insertQuery, [serie, modelo, tipo, marca, topic, req.userId]);
-    const dispositivoId = result.rows[0].dispositivo_id;
+    const result = await client.query(insertQuery, [serie, modelo, tipo, marca]);
+    const dispositivoId = result.rows[0].dsp_id;
 
     if (mqttClient) {
       mqttClient.subscribe(topic, (err) => {

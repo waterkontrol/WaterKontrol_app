@@ -95,7 +95,7 @@ const isAuth = (req, res, next) => {
     if (authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
       // const token = req.cookies.session_token;
-      console.log('🔐 Verificando token de sesión:', req);
+      console.log('🔐 Verificando token de sesión:', authHeader.split(' ')[1]);
       // if (!token) {
       //   return res.status(401).send({ message: 'No autorizado. Inicie sesión.', redirect: '/login.html' });
       // }

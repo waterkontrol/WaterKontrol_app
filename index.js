@@ -191,7 +191,7 @@ app.post('/auth/login', async (req, res) => {
     //   'session_token='+token+'; SameSite=None; Secure; HttpOnly; Max-Age=3600'
     // ]);
 
-    res.status(200).json({ message: 'Inicio de sesión exitoso.', token: token })
+    res.status(200).json({ message: 'Inicio de sesión exitoso.', token: token, usr_id: user.usr_id });
     // res.send({ message: 'Inicio de sesión exitoso.', token: token });
   } catch (error) {
     console.error('Error al iniciar sesión:', error);

@@ -279,8 +279,8 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
 
 // POST /api/dispositivo/registro (Registrar dispositivo)
 app.post('/api/dispositivo/registro', async (req, res) => {
-  const { serie, modelo, userId } = req.body;
-  if (!serie || !modelo || !userId) {
+  const { serie, modelo, tipo, userId } = req.body;
+  if (!serie || !modelo || !tipo || !userId) {
     return res.status(400).json({ message: 'Datos incompletos.' });
   }
 
@@ -290,11 +290,11 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     await client.query('BEGIN');
 
     const insertQuery = `
-      INSERT INTO dispositivo (serie, modelo, estatus, tipo, marca, fecha_creacion)
-      VALUES ($1, $2, 'A', 'A', 'M', NOW())
+      INSERT INTO dispositivo (serie, modelo, tipo, estatus, marca, fecha_creacion)
+      VALUES ($1, $2, $3, 'A', 'A', 'M', NOW())
       RETURNING dsp_id;
     `;
-    const result = await client.query(insertQuery, [serie, modelo]);
+    const result = await client.query(insertQuery, [serie, modelo, tipo]);
     const dispositivoId = result.rows[0].dsp_id;
 
    

@@ -297,15 +297,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     const result = await client.query(insertQuery, [serie, modelo]);
     const dispositivoId = result.rows[0].dsp_id;
 
-    const insertQueryReg = `
-      INSERT INTO registro (usr_id, dsp_id, topic)
-      VALUES ($1, $2, $3);
-    `;
-
-    const topic = `dispositivos/${serie}/telemetria`;
-
-    const resultReg = await client.query(insertQueryReg, [userId, dispositivoId, topic]);
-
+   
     // if (mqttClient) {
     //   mqttClient.subscribe(topic, (err) => {
     //     if (err) {
@@ -317,6 +309,20 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     // }
 
     await client.query('COMMIT');
+
+
+     const insertQueryReg = `
+      INSERT INTO registro (usr_id, dsp_id, topic)
+      VALUES ($1, $2, $3);
+    `;
+
+    const topic = `dispositivos/${serie}/telemetria`;
+
+    const resultReg = await client.query(insertQueryReg, [userId, dispositivoId, topic]);
+
+    await client.query('COMMIT');
+
+
     res.status(201).json({
       message: 'Dispositivo registrado exitosamente en la plataforma.',
       dispositivo_id: dispositivoId,

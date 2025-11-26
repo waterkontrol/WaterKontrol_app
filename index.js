@@ -291,7 +291,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
     const insertQuery = `
       INSERT INTO dispositivo (serie, modelo, tipo, estatus, marca, fecha_creacion)
-      VALUES ($1, $2, $3, 'A', 'A', 'M', NOW())
+      VALUES ($1, $2, $3, 'A', 'M', NOW())
       RETURNING dsp_id;
     `;
     const result = await client.query(insertQuery, [serie, modelo, tipo]);

@@ -269,7 +269,7 @@ app.post('/auth/reset', async (req, res) => {
 app.get('/api/dispositivos', isAuth, async (req, res) => {
   try {
     // const result = await pool.query('SELECT * FROM dispositivo WHERE usuario_id = $1', [req.userId]);
-    const result = await pool.query('SELECT * FROM dispositivo');
+    const result = await pool.query('SELECT * FROM dispositivo JOIN registro ON dispositivo.dsp_id = registro.dsp_id WHERE registro.usr_id = $1', [req.userId]);
     res.json(result.rows);
   } catch (err) {
     console.error('Error al obtener dispositivos:', err);
@@ -278,9 +278,9 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
 });
 
 // POST /api/dispositivo/registro (Registrar dispositivo)
-app.post('/api/dispositivo/registro', isAuth, async (req, res) => {
-  const { serie, modelo, tipo, marca, topic } = req.body;
-  if (!serie || !modelo || !tipo) {
+app.post('/api/dispositivo/registro', async (req, res) => {
+  const { serie, modelo, userId } = req.body;
+  if (!serie || !modelo || !userId) {
     return res.status(400).json({ message: 'Datos incompletos.' });
   }
 
@@ -290,22 +290,31 @@ app.post('/api/dispositivo/registro', isAuth, async (req, res) => {
     await client.query('BEGIN');
 
     const insertQuery = `
-      INSERT INTO dispositivo (serie, modelo, tipo, marca, estatus, fecha_creacion)
-      VALUES ($1, $2, $3, $4, 'A', NOW())
+      INSERT INTO dispositivo (serie, modelo, estatus, fecha_creacion)
+      VALUES ($1, $2, 'A', NOW())
       RETURNING dsp_id;
     `;
-    const result = await client.query(insertQuery, [serie, modelo, tipo, marca]);
+    const result = await client.query(insertQuery, [serie, modelo]);
     const dispositivoId = result.rows[0].dsp_id;
 
-    if (mqttClient) {
-      mqttClient.subscribe(topic, (err) => {
-        if (err) {
-          console.error(`❌ Error al suscribirse al topic del nuevo dispositivo (${topic}):`, err);
-        } else {
-          console.log(`✅ Dispositivo ${serie} registrado y suscrito al topic: ${topic}`);
-        }
-      });
-    }
+    const insertQueryReg = `
+      INSERT INTO registro (usr_id, dsp_id, topic)
+      VALUES ($1, $2, $3);
+    `;
+
+    const topic = `dispositivos/${serie}/telemetria`;
+
+    const resultReg = await client.query(insertQueryReg, [userId, dispositivoId, topic]);
+
+    // if (mqttClient) {
+    //   mqttClient.subscribe(topic, (err) => {
+    //     if (err) {
+    //       console.error(`❌ Error al suscribirse al topic del nuevo dispositivo (${topic}):`, err);
+    //     } else {
+    //       console.log(`✅ Dispositivo ${serie} registrado y suscrito al topic: ${topic}`);
+    //     }
+    //   });
+    // }
 
     await client.query('COMMIT');
     res.status(201).json({

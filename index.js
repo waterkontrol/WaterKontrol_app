@@ -314,13 +314,13 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     const dsp_id = result.rows[0].dsp_id;
 
     const insertQueryReg = `
-      INSERT INTO registro (usr_id, dsp_id, topic)
-      VALUES ($1, $2, $3);
+      INSERT INTO registro (usr_id, dsp_id, topic, nombre_registrado, fecha_registro)
+      VALUES ($1, $2, $3, $4, now());
     `;
 
     const topic = `dispositivos/${serial}/telemetria`;
 
-    const resultReg = await client.query(insertQueryReg, [userId, dsp_id, topic]);
+    const resultReg = await client.query(insertQueryReg, [userId, dsp_id, topic, nombre]);
 
     await client.query('COMMIT');
 

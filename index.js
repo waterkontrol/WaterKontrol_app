@@ -303,7 +303,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     //     if (err) {
     //       console.error(`❌ Error al suscribirse al topic del nuevo dispositivo (${topic}):`, err);
     //     } else {
-    //       console.log(`✅ Dispositivo ${serie} registrado y suscrito al topic: ${topic}`);
+    //       console.log(`✅ Dispositivo ${serial} registrado y suscrito al topic: ${topic}`);
     //     }
     //   });
     // }
@@ -333,7 +333,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
   } catch (error) {
     if (client) await client.query('ROLLBACK');
     if (error.code === '23505') {
-      return res.status(409).json({ message: `El dispositivo con serie ${serie} ya está registrado.` });
+      return res.status(409).json({ message: `El dispositivo con serie ${serial} ya está registrado.` });
     }
     console.error('Error al registrar nuevo dispositivo:', error);
     res.status(500).json({ message: 'Error interno al registrar el dispositivo.' });

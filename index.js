@@ -279,8 +279,8 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
 
 // POST /api/dispositivo/registro (Registrar dispositivo)
 app.post('/api/dispositivo/registro', async (req, res) => {
-  const { serie, modelo, tipo, userId } = req.body;
-  if (!serie || !modelo || !tipo || !userId) {
+  const { serial, nombre, userId } = req.body;
+  if (!serial || !nombre || !userId) {
     return res.status(400).json({ message: 'Datos incompletos.' });
   }
 
@@ -289,13 +289,13 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
 
-    const insertQuery = `
-      INSERT INTO dispositivo (serie, modelo, tipo, estatus, marca, fecha_creacion)
-      VALUES ($1, $2, $3, 'A', 'M', NOW())
-      RETURNING dsp_id;
-    `;
-    const result = await client.query(insertQuery, [serie, modelo, tipo]);
-    const dispositivoId = result.rows[0].dsp_id;
+    // const insertQuery = `
+    //   INSERT INTO dispositivo (serie, modelo, tipo, estatus, marca, fecha_creacion)
+    //   VALUES ($1, $2, $3, 'A', 'M', NOW())
+    //   RETURNING dsp_id;
+    // `;
+    // const result = await client.query(insertQuery, [serie, modelo, tipo]);
+    // const dispositivoId = result.rows[0].dsp_id;
 
    
     // if (mqttClient) {
@@ -308,24 +308,25 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     //   });
     // }
 
-    await client.query('COMMIT');
+    // await client.query('COMMIT');
 
+    const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.serial = $1', [serial]);
+    const dsp_id = result.rows[0].dsp_id;
 
-     const insertQueryReg = `
+    const insertQueryReg = `
       INSERT INTO registro (usr_id, dsp_id, topic)
       VALUES ($1, $2, $3);
     `;
 
-    const topic = `dispositivos/${serie}/telemetria`;
+    const topic = `dispositivos/${serial}/telemetria`;
 
-    const resultReg = await client.query(insertQueryReg, [userId, dispositivoId, topic]);
+    const resultReg = await client.query(insertQueryReg, [userId, dsp_id, topic]);
 
     await client.query('COMMIT');
 
-
     res.status(201).json({
       message: 'Dispositivo registrado exitosamente en la plataforma.',
-      dispositivo_id: dispositivoId,
+      dispositivo_id: dsp_id,
       topic: topic
     });
 
@@ -415,7 +416,7 @@ const marcarOfflineSiNoReportan = async () => {
     const columnCheck = await pool.query(`
       SELECT column_name
       FROM information_schema.columns
-      WHERE table_name = 'dispositivo' AND column_name = 'ultima_conexion'
+      WHERE table_name = 'registro' AND column_name = 'ultima_conexion'
     `);
 
     if (columnCheck.rows.length === 0) {
@@ -424,7 +425,7 @@ const marcarOfflineSiNoReportan = async () => {
     }
 
     await pool.query(`
-      UPDATE dispositivo
+      UPDATE registro
       SET estatus = 'O'
       WHERE estatus = 'online' AND ultima_conexion < NOW() - INTERVAL '5 minutes'
     `);

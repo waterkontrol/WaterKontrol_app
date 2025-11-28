@@ -311,6 +311,11 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     // await client.query('COMMIT');
 
     const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.serial = $1', [serial]);
+
+    if(result.rows.length == 0){
+      return res.status(409).json({ message: `El dispositivo con serie ${serial} no existe.` });
+    }
+
     const dsp_id = result.rows[0].dsp_id;
 
     const insertQueryReg = `

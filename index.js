@@ -280,11 +280,12 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
 });
 
 app.post('/api/dispositivo/parametros', async (req, res) => {
+  console.log('🔧 Obteniendo parámetros para dispositivo ID:', req.body.dsp_id);
   try {
     const result = await pool.query(`SELECT * 
      FROM dispositivo_parametro 
       JOIN parametros ON dispositivo_parametro.prt_id = parametros.prt_id
-      WHERE dispositivo_parametro.dsp_id = $1`, [req.dsp_id]);
+      WHERE dispositivo_parametro.dsp_id = $1`, [req.body.dsp_id]);
     res.json(result.rows);
   } catch (err) {
     console.error('Error al obtener parametros:', err);

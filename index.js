@@ -282,6 +282,19 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
   }
 });
 
+app.get('/api/dispositivo/parametros', isAuth, async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * 
+     FROM dispositivo_parametro 
+      JOIN parametros ON dispositivo_parametro.prt_id = parametros.prt_id
+      WHERE dispositivo_parametro.dsp_id = $1`, [req.dsp_id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al obtener parametros:', err);
+    res.status(500).json({ message: 'Error al obtener la lista de parametros.' });
+  }
+});
+
 // POST /api/dispositivo/registro (Registrar dispositivo)
 app.post('/api/dispositivo/registro', async (req, res) => {
   const { serial, nombre, userId } = req.body;

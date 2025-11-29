@@ -271,10 +271,7 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
     // const result = await pool.query('SELECT * FROM dispositivo WHERE usuario_id = $1', [req.userId]);
     const result = await pool.query(`SELECT * FROM dispositivo 
       JOIN registro ON dispositivo.dsp_id = registro.dsp_id 
-      JOIN dispositivo_parametro ON dispositivo.dsp_id = dispositivo_parametro.dsp_id
-      JOIN parametros ON dispositivo_parametro.prt_id = parametros.prt_id
-      WHERE registro.usr_id = $1
-      GROUP BY dispositivo.dsp_id`, [req.userId]);
+      WHERE registro.usr_id = $1`, [req.userId]);
     res.json(result.rows);
   } catch (err) {
     console.error('Error al obtener dispositivos:', err);

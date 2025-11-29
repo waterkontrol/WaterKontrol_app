@@ -279,7 +279,7 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
   }
 });
 
-app.get('/api/dispositivo/parametros', isAuth, async (req, res) => {
+app.post('/api/dispositivo/parametros', isAuth, async (req, res) => {
   try {
     const result = await pool.query(`SELECT * 
      FROM dispositivo_parametro 

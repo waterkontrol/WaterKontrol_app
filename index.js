@@ -297,8 +297,8 @@ app.post('/api/dispositivo/parametros', async (req, res) => {
 
 // POST /api/dispositivo/registro (Registrar dispositivo)
 app.post('/api/dispositivo/registro', async (req, res) => {
-  const { seriestype, nombre, userId } = req.body;
-  if (!seriestype|| !nombre || !userId) {
+  const { tipo, nombre, userId } = req.body;
+  if (!tipo|| !nombre || !userId) {
     return res.status(400).json({ message: 'Datos incompletos.' });
   }
 
@@ -328,10 +328,10 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
     // await client.query('COMMIT');
 
-    const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.seriestype = $1', [seriestype]);
+    const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.seriestype = $1', [tipo]);
 
     if(result.rows.length == 0){
-      return res.status(409).json({ message: `El dispositivo con serie ${seriestype} no existe.` });
+      return res.status(409).json({ message: `El dispositivo con serie ${tipo} no existe.` });
     }
 
     const dsp = result.rows[0];
@@ -342,7 +342,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
       VALUES ($1, $2, $3, $4, now()) returning rgt_id;
     `;
 
-    const topic = `${dsp.modelo}/${dsp.abreviatura}/${seriestype}`;
+    const topic = `${dsp.modelo}/${dsp.abreviatura}/${tipo}`;
 
     const resultReg = await client.query(insertQueryReg, [userId, dsp.dsp_id, topic, nombre]);
     
@@ -370,7 +370,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
   } catch (error) {
     if (client) await client.query('ROLLBACK');
     if (error.code === '23505') {
-      return res.status(409).json({ message: `El dispositivo con serie ${seriestype} ya está registrado.` });
+      return res.status(409).json({ message: `El dispositivo con serie ${tipo} ya está registrado.` });
     }
     console.error('Error al registrar nuevo dispositivo:', error);
     res.status(500).json({ message: 'Error interno al registrar el dispositivo.' });

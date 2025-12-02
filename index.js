@@ -326,10 +326,10 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
     // await client.query('COMMIT');
 
-    const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.serial = $1', [serial]);
+    const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.seriestype = $1', [seriestype]);
 
     if(result.rows.length == 0){
-      return res.status(409).json({ message: `El dispositivo con serie ${serial} no existe.` });
+      return res.status(409).json({ message: `El dispositivo con serie ${seriestype} no existe.` });
     }
 
     const dsp_id = result.rows[0].dsp_id;
@@ -339,7 +339,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
       VALUES ($1, $2, $3, $4, now());
     `;
 
-    const topic = `dispositivos/${serial}/telemetria`;
+    const topic = `dispositivos/${seriestype}/telemetria`;
 
     const resultReg = await client.query(insertQueryReg, [userId, dsp_id, topic, nombre]);
 

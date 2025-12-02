@@ -362,7 +362,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
     res.status(201).json({
       message: 'Dispositivo registrado exitosamente en la plataforma.',
-      dispositivo_id: dsp_id,
+      dispositivo_id: dsp.dsp_id,
       topic: topic
     });
 

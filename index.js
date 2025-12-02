@@ -332,16 +332,30 @@ app.post('/api/dispositivo/registro', async (req, res) => {
       return res.status(409).json({ message: `El dispositivo con serie ${seriestype} no existe.` });
     }
 
-    const dsp_id = result.rows[0].dsp_id;
+    const dsp = result.rows[0];
+    
 
     const insertQueryReg = `
       INSERT INTO registro (usr_id, dsp_id, topic, nombre_registrado, fecha_registro)
       VALUES ($1, $2, $3, $4, now());
     `;
 
-    const topic = `dispositivos/${seriestype}/telemetria`;
+    const topic = `${dsp.modelo}/${dsp.abreviatura}/${seriestype}`;
 
-    const resultReg = await client.query(insertQueryReg, [userId, dsp_id, topic, nombre]);
+    const resultReg = await client.query(insertQueryReg, [userId, dsp.dsp_id, topic, nombre]);
+
+    const result1 = await pool.query(`SELECT * 
+     FROM dispositivo_parametro 
+      JOIN parametros ON dispositivo_parametro.prt_id = parametros.prt_id
+      WHERE dispositivo_parametro.dsp_id = $1`, [dsp.dsp_id]);
+
+    for(const row of result1.rows){
+      const insertQueryVal = `
+        INSERT INTO registro_valor (rgt_id, prt_id, valor)  
+        VALUES ($1, $2, $3);
+        `;
+      const resultVal = await client.query(insertQueryVal, [resultReg.rows[0].rgt_id, row.prt_id, row.valorini]);
+    }
 
     await client.query('COMMIT');
 

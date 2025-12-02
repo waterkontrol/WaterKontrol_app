@@ -345,8 +345,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     const topic = `${dsp.modelo}/${dsp.abreviatura}/${seriestype}`;
 
     const resultReg = await client.query(insertQueryReg, [userId, dsp.dsp_id, topic, nombre]);
-    console.log('resultReg:', resultReg);
-
+    
     const result1 = await pool.query(`SELECT * 
      FROM dispositivo_parametro 
       JOIN parametros ON dispositivo_parametro.prt_id = parametros.prt_id

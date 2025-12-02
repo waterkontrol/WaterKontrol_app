@@ -337,7 +337,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
     const insertQueryReg = `
       INSERT INTO registro (usr_id, dsp_id, topic, nombre_registrado, fecha_registro)
-      VALUES ($1, $2, $3, $4, now() returning rgt_id);
+      VALUES ($1, $2, $3, $4, now()) returning rgt_id;
     `;
 
     const topic = `${dsp.modelo}/${dsp.abreviatura}/${seriestype}`;

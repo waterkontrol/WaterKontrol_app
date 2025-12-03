@@ -307,27 +307,6 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
 
-    // const insertQuery = `
-    //   INSERT INTO dispositivo (serie, modelo, tipo, estatus, marca, fecha_creacion)
-    //   VALUES ($1, $2, $3, 'A', 'M', NOW())
-    //   RETURNING dsp_id;
-    // `;
-    // const result = await client.query(insertQuery, [serie, modelo, tipo]);
-    // const dispositivoId = result.rows[0].dsp_id;
-
-   
-    // if (mqttClient) {
-    //   mqttClient.subscribe(topic, (err) => {
-    //     if (err) {
-    //       console.error(`❌ Error al suscribirse al topic del nuevo dispositivo (${topic}):`, err);
-    //     } else {
-    //       console.log(`✅ Dispositivo ${serial} registrado y suscrito al topic: ${topic}`);
-    //     }
-    //   });
-    // }
-
-    // await client.query('COMMIT');
-
     const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.serial = $1', [serial]);
 
     if(result.rows.length == 0){

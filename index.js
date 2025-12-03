@@ -298,7 +298,7 @@ app.post('/api/dispositivo/parametros', async (req, res) => {
 // POST /api/dispositivo/registro (Registrar dispositivo)
 app.post('/api/dispositivo/registro', async (req, res) => {
   const { tipo, nombre, userId } = req.body;
-  if (!tipo|| !nombre || !userId) {
+  if (!(tipo && seriestype)|| !nombre || !userId) {
     return res.status(400).json({ message: 'Datos incompletos.' });
   }
 

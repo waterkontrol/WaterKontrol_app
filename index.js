@@ -307,10 +307,12 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
 
-    const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.serial = $1', [serial]);
+    const tipoBusqueda = tipo ?? seriestype;
+
+    const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.seriestype = $1', [tipoBusqueda]);
 
     if(result.rows.length == 0){
-      return res.status(409).json({ message: `El dispositivo con serie ${serial} no existe.` });
+      return res.status(409).json({ message: `El dispositivo tipo ${tipoBusqueda} no existe.` });
     }
 
     const dsp = result.rows[0];

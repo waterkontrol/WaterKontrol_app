@@ -297,8 +297,8 @@ app.post('/api/dispositivo/parametros', async (req, res) => {
 
 // POST /api/dispositivo/registro (Registrar dispositivo)
 app.post('/api/dispositivo/registro', async (req, res) => {
-  const { tipo, nombre, userId } = req.body;
-  if (!(tipo && seriestype)|| !nombre || !userId) {
+  const { tipo, seriestype, nombre, serial, userId } = req.body;
+  if (!(tipo && seriestype)|| !nombre || serial || !userId) {
     return res.status(400).json({ message: 'Datos incompletos.' });
   }
 
@@ -328,23 +328,23 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
     // await client.query('COMMIT');
 
-    const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.seriestype = $1', [tipo]);
+    const result = await pool.query('SELECT * FROM dispositivo WHERE dispositivo.serial = $1', [serial]);
 
     if(result.rows.length == 0){
-      return res.status(409).json({ message: `El dispositivo con serie ${tipo} no existe.` });
+      return res.status(409).json({ message: `El dispositivo con serie ${serial} no existe.` });
     }
 
     const dsp = result.rows[0];
     
 
     const insertQueryReg = `
-      INSERT INTO registro (usr_id, dsp_id, topic, nombre_registrado, fecha_registro)
-      VALUES ($1, $2, $3, $4, now()) returning rgt_id;
+      INSERT INTO registro (usr_id, dsp_id, topic, nombre_registrado, serial, fecha_registro)
+      VALUES ($1, $2, $3, $4, $5, now()) returning rgt_id;
     `;
 
     const topic = `${dsp.modelo}/${dsp.abreviatura}/${tipo}`;
 
-    const resultReg = await client.query(insertQueryReg, [userId, dsp.dsp_id, topic, nombre]);
+    const resultReg = await client.query(insertQueryReg, [userId, dsp.dsp_id, topic, nombre, serial]);
     
     const result1 = await pool.query(`SELECT * 
      FROM dispositivo_parametro 

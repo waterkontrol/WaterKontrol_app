@@ -323,7 +323,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, now()) returning rgt_id;
     `;
 
-    const topic = `${dsp.modelo}/${dsp.abreviatura}/${serial}`;
+    const topic = `${dsp.modelo}/${dsp.abreviatura}/`+serial;
 
     const resultReg = await client.query(insertQueryReg, [userId, dsp.dsp_id, topic, nombre, serial]);
     

@@ -323,7 +323,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, now()) returning rgt_id;
     `;
 
-    const topic = `${dsp.modelo}/${dsp.abreviatura}/${tipo}`;
+    const topic = `${dsp.modelo}/${dsp.abreviatura}/${tipoBusqueda}`;
 
     const resultReg = await client.query(insertQueryReg, [userId, dsp.dsp_id, topic, nombre, serial]);
     
@@ -351,7 +351,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
   } catch (error) {
     if (client) await client.query('ROLLBACK');
     if (error.code === '23505') {
-      return res.status(409).json({ message: `El dispositivo con serie ${tipo} ya está registrado.` });
+      return res.status(409).json({ message: `El dispositivo con serial ${serial} ya está registrado.` });
     }
     console.error('Error al registrar nuevo dispositivo:', error);
     res.status(500).json({ message: 'Error interno al registrar el dispositivo.' });

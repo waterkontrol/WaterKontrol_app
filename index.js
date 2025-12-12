@@ -360,7 +360,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
   }
 });
 
-app.post('/api/dispositivo/parametros', async (req, res) => {
+app.post('/api/dispositivo/actualizar', async (req, res) => {
   res.status(201).json({
       message: 'Dispositivo actualizado exitosamente.'
     });

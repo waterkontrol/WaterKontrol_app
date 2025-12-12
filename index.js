@@ -61,27 +61,52 @@ const testDatabaseConnection = async () => {
 // ===================================================================================
 // LÓGICA DE CONEXIÓN Y MANEJO DE MQTT
 // ===================================================================================
-let mqttClient;
+// let mqttClient;
 
-const connectMqtt = () => {
-  const url = process.env.MQTT_BROKER_URL || 'mqtt://test.mosquitto.org';
-  mqttClient = mqtt.connect(url);
+// const connectMqtt = () => {
+//   const url = process.env.MQTT_BROKER_URL || 'mqtt://test.mosquitto.org';
+//   mqttClient = mqtt.connect(url);
 
-  mqttClient.on('connect', () => {
-    console.log('✅ Conexión a MQTT Broker exitosa.');
-    const telemetryTopic = 'dispositivos/+/telemetria';
-    mqttClient.subscribe(telemetryTopic, (err) => {
-      if (!err) {
-        console.log(`✅ Suscrito al topic de telemetría general: ${telemetryTopic}`);
-      } else {
-        console.error(`❌ Error al suscribirse a ${telemetryTopic}:`, err);
-      }
-    });
+//   mqttClient.on('connect', () => {
+//     console.log('✅ Conexión a MQTT Broker exitosa.');
+//     const telemetryTopic = 'mk-208/VB/E8:6B:EA:DE:ED:74';
+//     mqttClient.subscribe(telemetryTopic, (err) => {
+//       if (!err) {
+//         console.log(`✅ Suscrito al topic de telemetría general: ${telemetryTopic}`);
+//       } else {
+//         console.error(`❌ Error al suscribirse a ${telemetryTopic}:`, err);
+//       }
+//     });
+//   });
+//   return mqttClient;
+// };
+
+// connectMqtt();
+
+const mqttClient = mqtt.connect("mqtt://broker.emqx.io");
+
+mqttClient.on('connect', function () {
+  console.log('Connected to MQTT broker');
+  // Subscribe to the topic here
+  mqttClient.subscribe('mk-208/VB/E8:6B:EA:DE:ED:74', function (err) {
+    if (err) {
+      console.error('Subscription failed:', err);
+    } else {
+      console.log('Subscribed to mk-208/VB/E8:6B:EA:DE:ED:74');
+    }
   });
-  return mqttClient;
-};
+});
 
-connectMqtt();
+mqttClient.on('message', function (topic, message) {
+  // Message is a Buffer, convert to string if needed
+  console.log('Received message on topic:', topic.toString());
+  console.log('Message payload:', message.toString());
+  // Process your message here
+});
+
+mqttClient.on('error', function(error) {
+  console.error('MQTT error:', error); // Listen for errors
+});
 
 // ===================================================================================
 // FUNCIONES DE AUTENTICACIÓN
@@ -370,65 +395,67 @@ app.post('/api/dispositivo/actualizar', async (req, res) => {
 // PROCESAMIENTO DE MENSAJES MQTT
 // ===================================================================================
 
-const procesarMensajesMqtt = () => {
-  if (!mqttClient) return;
+// const procesarMensajesMqtt = () => {
+//   if (!mqttClient) return;
+//   console.log('🔧 Iniciando procesamiento de mensajes MQTT...');
+  
+//   mqttClient.on('message', async (topic, message) => {
+//     console.log(`📥 Mensaje recibido en topic [${topic}]: ${message.toString()}`);
+//     const parts = topic.split('/');
+//     if (parts.length !== 3 || parts[2] !== 'telemetria') return;
+//     const serie = parts[1];
 
-  mqttClient.on('message', async (topic, message) => {
-    const parts = topic.split('/');
-    if (parts.length !== 3 || parts[2] !== 'telemetria') return;
-    const serie = parts[1];
+//     let dbClient;
+//     try {
+//       const data = JSON.parse(message.toString());
+//       const { temp, ph, msg_id } = data;
+//       const timestamp = new Date();
 
-    let dbClient;
-    try {
-      const data = JSON.parse(message.toString());
-      const { temp, ph, msg_id } = data;
-      const timestamp = new Date();
+//       if (!serie || temp === undefined || ph === undefined || !msg_id) {
+//         console.warn(`⚠️ Mensaje inválido o incompleto del topic [${topic}].`);
+//         return;
+//       }
 
-      if (!serie || temp === undefined || ph === undefined || !msg_id) {
-        console.warn(`⚠️ Mensaje inválido o incompleto del topic [${topic}].`);
-        return;
-      }
+//       dbClient = await pool.connect();
+//       await dbClient.query('BEGIN');
 
-      dbClient = await pool.connect();
-      await dbClient.query('BEGIN');
+//       const deviceResult = await dbClient.query('SELECT dispositivo_id FROM dispositivo WHERE serie = $1', [serie]);
+//       if (deviceResult.rows.length === 0) {
+//         await dbClient.query('ROLLBACK');
+//         return;
+//       }
+//       const dispositivo_id = deviceResult.rows[0].dispositivo_id;
 
-      const deviceResult = await dbClient.query('SELECT dispositivo_id FROM dispositivo WHERE serie = $1', [serie]);
-      if (deviceResult.rows.length === 0) {
-        await dbClient.query('ROLLBACK');
-        return;
-      }
-      const dispositivo_id = deviceResult.rows[0].dispositivo_id;
+//       const telemetryInsert = `
+//         INSERT INTO telemetria (dispositivo_id, temperatura, ph, marca_tiempo, msg_id)
+//         VALUES ($1, $2, $3, $4, $5)
+//         ON CONFLICT (dispositivo_id, msg_id) DO NOTHING;
+//       `;
+//       await dbClient.query(telemetryInsert, [dispositivo_id, temp, ph, timestamp, msg_id]);
 
-      const telemetryInsert = `
-        INSERT INTO telemetria (dispositivo_id, temperatura, ph, marca_tiempo, msg_id)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (dispositivo_id, msg_id) DO NOTHING;
-      `;
-      await dbClient.query(telemetryInsert, [dispositivo_id, temp, ph, timestamp, msg_id]);
+//       const updateDevice = `
+//         UPDATE dispositivo
+//         SET 
+//           ultima_conexion = $1, 
+//           estatus = 'A',
+//           ultimos_valores = jsonb_build_object('temperatura', $2, 'ph', $3)
+//         WHERE dispositivo_id = $4;
+//       `;
+//       await dbClient.query(updateDevice, [timestamp, temp, ph, dispositivo_id]);
 
-      const updateDevice = `
-        UPDATE dispositivo
-        SET 
-          ultima_conexion = $1, 
-          estatus = 'A',
-          ultimos_valores = jsonb_build_object('temperatura', $2, 'ph', $3)
-        WHERE dispositivo_id = $4;
-      `;
-      await dbClient.query(updateDevice, [timestamp, temp, ph, dispositivo_id]);
+//       await dbClient.query('COMMIT');
+//     } catch (error) {
+//       if (dbClient) await dbClient.query('ROLLBACK');
+//       console.error(`❌ Error procesando mensaje del topic [${topic}]:`, error.message);
+//     } finally {
+//       if (dbClient) dbClient.release();
+//     }
+//   });
 
-      await dbClient.query('COMMIT');
-    } catch (error) {
-      if (dbClient) await dbClient.query('ROLLBACK');
-      console.error(`❌ Error procesando mensaje del topic [${topic}]:`, error.message);
-    } finally {
-      if (dbClient) dbClient.release();
-    }
-  });
-
-  mqttClient.on('error', (error) => {
-    console.error('❌ Error en la conexión MQTT:', error);
-  });
-};
+//   mqttClient.on('error', (error) => {
+//     console.error('❌ Error en la conexión MQTT:', error);
+//   });
+// };
 
 // ===================================================================================
 // MARCAR DISPOSITIVOS OFFLINE (solo si existe la columna ultima_conexion)
@@ -518,5 +545,5 @@ const startServer = () => {
   });
 };
 
-initializeApplicationServices();
+// initializeApplicationServices();
 startServer();

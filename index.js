@@ -442,8 +442,8 @@ const procesarMensajesMqtt = () => {
       `;
       await dbClient.query(updateDevice, [timestamp, rgt_id]);
 
-      console.log(JSON.parse(message.replace(/'/g, '"')));
-      const messageJ = JSON.parse(message.replace(/'/g, '"'));
+      console.log(JSON.parse(message.toString().replace(/'/g, '"')));
+      const messageJ = JSON.parse(message.toString().replace(/'/g, '"'));
 
       const result1 = await pool.query(`SELECT vlr_id, tipo
         FROM registro_valor 

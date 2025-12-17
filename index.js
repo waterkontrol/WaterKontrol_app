@@ -442,16 +442,19 @@ const procesarMensajesMqtt = () => {
       `;
       await dbClient.query(updateDevice, [timestamp, rgt_id]);
 
+      console.log(JSON.parse(message));
+      const messageJ = JSON.parse(message);
+
       const result1 = await pool.query(`SELECT vlr_id, tipo
         FROM registro_valor 
         JOIN parametros ON registro_valor.prt_id = parametros.prt_id
         WHERE registro_valor.rgt_id = $1`, [rgt_id]); 
 
       for(const row of result1.rows){
-        console.log(`🔧 Actualizando valor [${row.tipo}] para rgt_id ${rgt_id} message ${message[row.tipo]}`);
+        console.log(`🔧 Actualizando valor [${row.tipo}] para rgt_id ${rgt_id} message ${messageJ[row.tipo]}`);
         const insertQueryVal = `
           UPDATE registro_valor SET valor = $3 WHERE rgt_id = $1 AND prt_id = $2;`;
-        const resultVal = await dbClient.query(insertQueryVal, [rgt_id, row.prt_id, message[row.tipo]]);
+        const resultVal = await dbClient.query(insertQueryVal, [rgt_id, row.prt_id, messageJ[row.tipo]]);
       }
 
       await dbClient.query('COMMIT');

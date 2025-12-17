@@ -401,7 +401,7 @@ const procesarMensajesMqtt = () => {
     const msg = {
       notification: {
         title: topic,
-        body: JSON.stringify(message),
+        body: message.toString(),
       },
     };
 

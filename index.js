@@ -419,12 +419,13 @@ const procesarMensajesMqtt = () => {
       dbClient = await pool.connect();
       await dbClient.query('BEGIN');
 
-      const deviceResult = await dbClient.query('SELECT rgt_id FROM registro WHERE serial = $1', [serie]);
+      const deviceResult = await dbClient.query('SELECT rgt_id, frb_token FROM registro join usuario on registro.usr_id = usuario.usr_id WHERE serial = $1', [serie]);
       if (deviceResult.rows.length === 0) {
         await dbClient.query('ROLLBACK');
         return;
       }
       const rgt_id = deviceResult.rows[0].rgt_id;
+      const frb_token = deviceResult.rows[0].frb_token;
 
       const telemetryInsert = `
         INSERT INTO mensajes (rgt_id, data, status)
@@ -443,7 +444,7 @@ const procesarMensajesMqtt = () => {
 
       await dbClient.query('COMMIT');
 
-      admin.messaging().send({...msg, token: element.token})
+      admin.messaging().send({...msg, token: frb_token})
         .then((response) => {
             console.log('Successfully sent message:', response);
         })

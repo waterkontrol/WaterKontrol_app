@@ -292,9 +292,9 @@ app.post('/api/dispositivo/parametros', async (req, res) => {
     const result = await pool.query(`SELECT * 
      FROM dispositivo_parametro 
       JOIN parametros ON dispositivo_parametro.prt_id = parametros.prt_id
-      join registro on registro.dsp_id = dispositivo_parametro.dsp_id and registro.dsp_id = $1
+      join registro on registro.dsp_id = dispositivo_parametro.dsp_id and registro.rgt_id = $3
       join registro_valor on registro_valor.rgt_id = registro.rgt_id and registro_valor.prt_id = parametros.prt_id
-      WHERE registro.usr_id = $2 AND dispositivo_parametro.dsp_id = $1`, [req.body.dsp_id, req.body.usr_id]);
+      WHERE registro.usr_id = $2 AND dispositivo_parametro.dsp_id = $1`, [req.body.dsp_id, req.body.usr_id, , req.body.rgt_id]);
     res.json(result.rows);
   } catch (err) {
     console.error('Error al obtener parametros:', err);

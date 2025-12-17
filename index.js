@@ -12,9 +12,15 @@ const nodemailer = require('nodemailer');
 const cookieParser = require('cookie-parser');
 const saltRounds = 10;
 var cors = require('cors');
+const admin = require('firebase-admin');
+const serviceAccount = require('./serviceAccountKey.json');
 
 // --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+});
 
 // MIDDLEWARE PRINCIPAL
 app.use(express.json());
@@ -366,6 +372,16 @@ app.post('/api/dispositivo/actualizar', async (req, res) => {
     });
 });
 
+app.post('/api/dispositivo/token', async (req, res) => {
+
+   await pool.query('UPDATE registro SET token = $1 WHERE correo = $2', [req.body.token, req.body.correo]);
+
+  res.status(201).json({
+      message: 'Dispositivo actualizado exitosamente.'
+    });
+});
+
+
 // ===================================================================================
 // PROCESAMIENTO DE MENSAJES MQTT
 // ===================================================================================
@@ -379,6 +395,13 @@ const procesarMensajesMqtt = () => {
     const parts = topic.split('/');
     // if (parts.length !== 3 || parts[2] !== 'telemetria') return;
     const serie = parts[2];
+
+    const msg = {
+      notification: {
+        title: topic,
+        body: message,
+      },
+    };
 
     let dbClient;
     try {
@@ -417,6 +440,15 @@ const procesarMensajesMqtt = () => {
       await dbClient.query(updateDevice, [timestamp, rgt_id]);
 
       await dbClient.query('COMMIT');
+
+      admin.messaging().send({...msg, token: element.token})
+        .then((response) => {
+            console.log('Successfully sent message:', response);
+        })
+        .catch((error) => {
+            console.log('Error sending message:', error);
+        }); 
+
     } catch (error) {
       if (dbClient) await dbClient.query('ROLLBACK');
       console.error(`❌ Error procesando mensaje del topic [${topic}]:`, error.message);

@@ -379,6 +379,7 @@ app.post('/api/dispositivo/token', async (req, res) => {
   res.status(201).json({
       message: 'Dispositivo actualizado exitosamente.'
     });
+    
 });
 
 

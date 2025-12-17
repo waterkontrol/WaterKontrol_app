@@ -27,6 +27,8 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "firebase-admin": "^13.6.0",
+    "ln-capacitor-wifi": "^0.3.0-beta",
     "mqtt": "^5.14.1",
     "nodemailer": "^6.10.1",
     "path": "^0.12.7",

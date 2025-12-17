@@ -14,12 +14,13 @@ const saltRounds = 10;
 var cors = require('cors');
 const admin = require('firebase-admin');
 // const serviceAccount = require('./serviceAccountKey.json');
+const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT);
 
 // --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
 
 admin.initializeApp({
-    credential: admin.credential.cert(process.env.SERVICE_ACCOUNT),
+    credential: admin.credential.cert(serviceAccount),
 });
 
 // MIDDLEWARE PRINCIPAL

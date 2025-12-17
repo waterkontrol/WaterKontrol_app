@@ -13,13 +13,13 @@ const cookieParser = require('cookie-parser');
 const saltRounds = 10;
 var cors = require('cors');
 const admin = require('firebase-admin');
-const serviceAccount = require('./serviceAccountKey.json');
+// const serviceAccount = require('./serviceAccountKey.json');
 
 // --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
 
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential: admin.credential.cert(process.env.SERVICE_ACCOUNT),
 });
 
 // MIDDLEWARE PRINCIPAL

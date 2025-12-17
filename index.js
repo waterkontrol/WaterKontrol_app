@@ -375,7 +375,7 @@ app.post('/api/dispositivo/actualizar', async (req, res) => {
 
 app.post('/api/dispositivo/token', async (req, res) => {
 
-  await pool.query('UPDATE usuario SET token = $1 WHERE correo = $2', [req.body.token, req.body.correo]); 
+  await pool.query('UPDATE usuario SET frb_token = $1 WHERE correo = $2', [req.body.token, req.body.correo]); 
 
   res.status(201).json({
       message: 'Dispositivo actualizado exitosamente.'

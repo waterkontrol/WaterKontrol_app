@@ -445,7 +445,7 @@ const procesarMensajesMqtt = () => {
       console.log(JSON.parse(message.toString().replace(/'/g, '"')));
       const messageJ = JSON.parse(message.toString().replace(/'/g, '"'));
 
-      const result1 = await pool.query(`SELECT vlr_id, tipo
+      const result1 = await pool.query(`SELECT vlr_id, tipo, prt_id
         FROM registro_valor 
         JOIN parametros ON registro_valor.prt_id = parametros.prt_id
         WHERE registro_valor.rgt_id = $1`, [rgt_id]); 

@@ -448,6 +448,7 @@ const procesarMensajesMqtt = () => {
         WHERE registro_valor.rgt_id = $1`, [rgt_id]); 
 
       for(const row of result1.rows){
+        console.log(`🔧 Actualizando valor [${row.tipo}] para rgt_id ${rgt_id} message ${message[row.tipo]}`);
         const insertQueryVal = `
           UPDATE registro_valor SET valor = $3 WHERE rgt_id = $1 AND prt_id = $2;`;
         const resultVal = await dbClient.query(insertQueryVal, [rgt_id, row.prt_id, message[row.tipo]]);

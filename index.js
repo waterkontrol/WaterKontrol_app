@@ -70,20 +70,29 @@ const testDatabaseConnection = async () => {
 // ===================================================================================
 let mqttClient;
 
-const connectMqtt = () => {
+const connectMqtt = async () => {
+
+  const result = await pool.query('SELECT topic FROM registro');
+ 
   const url = process.env.MQTT_BROKER_URL || 'mqtt://test.mosquitto.org';
   mqttClient = mqtt.connect(url);
 
   mqttClient.on('connect', () => {
     console.log('✅ Conexión a MQTT Broker exitosa.');
-    const telemetryTopic = 'mk-208/VB/E8:6B:EA:DE:ED:74';
-    mqttClient.subscribe(telemetryTopic, (err) => {
-      if (!err) {
-        console.log(`✅ Suscrito al topic de telemetría general: ${telemetryTopic}`);
-      } else {
-        console.error(`❌ Error al suscribirse a ${telemetryTopic}:`, err);
-      }
+    // const telemetryTopic = 'mk-208/VB/E8:6B:EA:DE:ED:74';
+    
+    result.rows.forEach(row => {
+      const telemetryTopic = row.topic.concat('/out');
+
+      mqttClient.subscribe(telemetryTopic, (err) => {
+        if (!err) {
+          console.log(`✅ Suscrito al topic de telemetría general: ${telemetryTopic}`);
+        } else {
+          console.error(`❌ Error al suscribirse a ${telemetryTopic}:`, err);
+        }
+      });
     });
+
   });
   return mqttClient;
 };
@@ -346,6 +355,16 @@ app.post('/api/dispositivo/registro', async (req, res) => {
         `;
       const resultVal = await client.query(insertQueryVal, [resultReg.rows[0].rgt_id, row.prt_id, row.valorini]);
     }
+
+    const telemetryTopic = topic + '/out';
+
+    mqttClient.subscribe(telemetryTopic, (err) => {
+      if (!err) {
+        console.log(`✅ Suscrito al topic de telemetría general: ${telemetryTopic}`);
+      } else {
+        console.error(`❌ Error al suscribirse a ${telemetryTopic}:`, err);
+      }
+    });
 
     await client.query('COMMIT');
 

@@ -397,7 +397,13 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
 app.post('/api/dispositivo/actualizar', async (req, res) => {
 
-  mqttClient.subscribe(req.body.topic.concat('/in'), (err) => {
+  const message = JSON.stringify({
+    "bomba": "encendida",
+    "valula": "abierta",
+    "msg_id": 1
+  });
+
+  mqttClient.publish(req.body.topic.concat('/in'), message, { qos: 0, retain: false }, (err) => {
     if (!err) {
       console.log(`✅ Suscrito al topic de telemetría general: ${req.body.topic.concat('/in')}`);
       res.status(201).json({

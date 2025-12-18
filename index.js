@@ -398,7 +398,8 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 app.post('/api/dispositivo/actualizar', async (req, res) => {
 
   const message = JSON.stringify({
-    "bomba": req.body.message
+    "bomba": req.body.message,
+    "valvula": req.body.message == 'apagada' ? 'abierta' : 'cerrada'
   });
 
   mqttClient.publish(req.body.topic.concat('/in'), message, { qos: 0, retain: false }, (err) => {

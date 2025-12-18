@@ -397,16 +397,16 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
 app.post('/api/dispositivo/actualizar', async (req, res) => {
 
-  mqttClient.subscribe(req.body.topic, (err) => {
+  mqttClient.subscribe(req.body.topic.concat('/in'), (err) => {
     if (!err) {
-      console.log(`✅ Suscrito al topic de telemetría general: ${req.body.topic}`);
+      console.log(`✅ Suscrito al topic de telemetría general: ${req.body.topic.concat('/in')}`);
       res.status(201).json({
         message: 'Dispositivo actualizado exitosamente.'
       });
     } else {
-      console.error(`❌ Error al suscribirse a ${req.body.topic}:`, err);
+      console.error(`❌ Error al suscribirse a ${req.body.topic.concat('/in')}:`, err);
       res.status(400).json({
-        message: `❌ Error al suscribirse a ${req.body.topic}:`
+        message: `❌ Error al suscribirse a ${req.body.topic.concat('/in')}:`
       });
     }
   });

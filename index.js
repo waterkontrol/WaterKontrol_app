@@ -405,7 +405,7 @@ app.post('/api/dispositivo/actualizar', async (req, res) => {
 
   mqttClient.publish(req.body.topic.concat('/in'), message, { qos: 0, retain: false }, (err) => {
     if (!err) {
-      console.log(`✅ Suscrito al topic de telemetría general: ${req.body.topic.concat('/in')}`);
+      console.log(`✅ Mensaje enviado al topic de telemetría general: ${req.body.topic.concat('/in')}`);
       res.status(201).json({
         message: 'Dispositivo actualizado exitosamente.'
       });

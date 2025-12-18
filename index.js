@@ -396,9 +396,22 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 });
 
 app.post('/api/dispositivo/actualizar', async (req, res) => {
-  res.status(201).json({
-      message: 'Dispositivo actualizado exitosamente.'
-    });
+
+  mqttClient.subscribe(req.body.topic, (err) => {
+    if (!err) {
+      console.log(`✅ Suscrito al topic de telemetría general: ${req.body.topic}`);
+      res.status(201).json({
+        message: 'Dispositivo actualizado exitosamente.'
+      });
+    } else {
+      console.error(`❌ Error al suscribirse a ${req.body.topic}:`, err);
+      res.status(400).json({
+        message: `❌ Error al suscribirse a ${req.body.topic}:`
+      });
+    }
+  });
+
+  
 });
 
 app.post('/api/dispositivo/token', async (req, res) => {

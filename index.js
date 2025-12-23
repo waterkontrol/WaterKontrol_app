@@ -377,6 +377,16 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
     await client.query('COMMIT');
 
+    const telemetryTopic = topic.concat('/out');
+
+    mqttClient.subscribe(telemetryTopic, (err) => {
+      if (!err) {
+        console.log(`✅ Suscrito al topic de telemetría general: ${telemetryTopic}`);
+      } else {
+        console.error(`❌ Error al suscribirse a ${telemetryTopic}:`, err);
+      }
+    });
+
     res.status(201).json({
       message: 'Dispositivo registrado exitosamente en la plataforma.',
       dispositivo_id: dsp.dsp_id,
@@ -396,7 +406,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 });
 
 app.post('/api/dispositivo/actualizar', async (req, res) => {
-
+console.log(req.body)
   const message = JSON.stringify({
     "bomba": req.body.message,
     "valvula": req.body.message == 'apagada' ? 'abierta' : 'cerrada'
@@ -404,6 +414,7 @@ app.post('/api/dispositivo/actualizar', async (req, res) => {
 
   mqttClient.publish(req.body.topic.concat('/in'), message, { qos: 0, retain: false }, (err) => {
     if (!err) {
+      
       console.log(`✅ Mensaje enviado al topic de telemetría general: ${req.body.topic.concat('/in')}, mensaje: ${message}`);
       res.status(201).json({
         message: 'Dispositivo actualizado exitosamente.'

@@ -505,9 +505,10 @@ const procesarMensajesMqtt = () => {
       const result1 = await pool.query(`SELECT vlr_id, tipo, parametros.prt_id
         FROM registro_valor 
         JOIN parametros ON registro_valor.prt_id = parametros.prt_id
-        WHERE registro_valor.rgt_id = $1 AND parametros.tipo = $2`, [rgt_id, row.tipo]); 
+        WHERE registro_valor.rgt_id = $1`, [rgt_id]); 
 
       for(const row of result1.rows){
+        if(messageJ[row.tipo] === undefined) continue;
         console.log(`🔧 Actualizando valor [${row.tipo}] para rgt_id ${rgt_id} prt_id ${row.prt_id } con valor ${messageJ[row.tipo]}`);
         const insertQueryVal = `
           UPDATE registro_valor SET valor = $3 WHERE rgt_id = $1 AND prt_id = $2;`;

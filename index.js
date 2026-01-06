@@ -455,8 +455,15 @@ const procesarMensajesMqtt = () => {
     // if (parts.length !== 3 || parts[2] !== 'telemetria') return;
     const serie = parts[2];
 
+    // const msg = {
+    //   notification: {
+    //     title: topic,
+    //     body: message.toString(),
+    //   },
+    // };
+
     const msg = {
-      notification: {
+      data: {
         title: topic,
         body: message.toString(),
       },
@@ -517,7 +524,7 @@ const procesarMensajesMqtt = () => {
 
       await dbClient.query('COMMIT');
 
-      admin.messaging().send({data: message.toString(), token: frb_token
+      admin.messaging().send({...msg, token: frb_token
         })
         .then((response) => {
             console.log('Successfully sent message:', response);

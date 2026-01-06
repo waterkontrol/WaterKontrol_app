@@ -517,7 +517,16 @@ const procesarMensajesMqtt = () => {
 
       await dbClient.query('COMMIT');
 
-      admin.messaging().send({...msg, token: frb_token})
+      admin.messaging().send({...msg, token: frb_token, apns: {
+          payload: {
+            aps: {
+              'content-available': 1
+            }
+          }
+        },
+        android: {
+            priority: 'normal'
+        }})
         .then((response) => {
             console.log('Successfully sent message:', response);
         })

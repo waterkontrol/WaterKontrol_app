@@ -420,9 +420,9 @@ console.log(req.body)
         message: 'Dispositivo actualizado exitosamente.'
       });
     } else {
-      console.error(`❌ Error al suscribirse a ${req.body.topic.concat('/in')}:`, err);
+      console.error(`❌ Error al publicar a ${req.body.topic.concat('/in')}:`, err);
       res.status(400).json({
-        message: `❌ Error al suscribirse a ${req.body.topic.concat('/in')}:`
+        message: `❌ Error al publicar a ${req.body.topic.concat('/in')}:`
       });
     }
   });
@@ -500,11 +500,11 @@ const procesarMensajesMqtt = () => {
       const updateDevice = `
         UPDATE registro
         SET 
-          ultima_conexion = $1, 
+          ultima_conexion = now(), 
           estatus = 'A'
-        WHERE rgt_id = $2;
+        WHERE rgt_id = $1;
       `;
-      await dbClient.query(updateDevice, [timestamp, rgt_id]);
+      await dbClient.query(updateDevice, [rgt_id]);
 
       console.log(JSON.parse(message.toString().replace(/'/g, '"')));
       const messageJ = JSON.parse(message.toString().replace(/'/g, '"'));

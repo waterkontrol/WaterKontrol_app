@@ -491,11 +491,11 @@ const procesarMensajesMqtt = () => {
       const rgt_id = deviceResult.rows[0].rgt_id;
       const frb_token = deviceResult.rows[0].frb_token;
 
-      const telemetryInsert = `
-        INSERT INTO mensajes (rgt_id, data, status)
-        VALUES ($1, $2, 1);
-      `;
-      await dbClient.query(telemetryInsert, [rgt_id, message]);
+      // const telemetryInsert = `
+      //   INSERT INTO mensajes (rgt_id, data, status)
+      //   VALUES ($1, $2, 1);
+      // `;
+      // await dbClient.query(telemetryInsert, [rgt_id, message]);
 
       const updateDevice = `
         UPDATE registro

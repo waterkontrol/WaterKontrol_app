@@ -440,6 +440,26 @@ app.post('/api/dispositivo/token', async (req, res) => {
 
 });
 
+app.post('/api/dispositivo/refresh', async (req, res) => {
+  
+  mqttClient.publish(req.body.topic.concat('/in'), '{ "actualizar": 1 }', { qos: 0, retain: false }, (err) => {
+    if (!err) {
+      
+      console.log(`✅ Mensaje enviado al topic de telemetría general: ${req.body.topic.concat('/in')}, mensaje: ${'{ "actualizar": 1 }'}`);
+      res.status(201).json({
+        message: 'Dispositivo actualizado exitosamente.'
+      });
+    } else {
+      console.error(`❌ Error al publicar a ${req.body.topic.concat('/in')}:`, err);
+      res.status(400).json({
+        message: `❌ Error al publicar a ${req.body.topic.concat('/in')}:`
+      });
+    }
+  });
+
+  
+});
+
 
 // ===================================================================================
 // PROCESAMIENTO DE MENSAJES MQTT

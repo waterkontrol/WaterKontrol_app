@@ -511,7 +511,7 @@ const procesarMensajesMqtt = () => {
         return;
       }
       // const rgt_id = deviceResult.rows[0].rgt_id;
-      const frb_token = deviceResult.rows[0].frb_token;
+      // const frb_token = deviceResult.rows[0].frb_token;
 
       // const telemetryInsert = `
       //   INSERT INTO mensajes (rgt_id, data, status)
@@ -546,14 +546,20 @@ const procesarMensajesMqtt = () => {
 
       await dbClient.query('COMMIT');
 
-      admin.messaging().send({...msg, token: frb_token
-        })
-        .then((response) => {
-            console.log('Successfully sent message:', response);
-        })
-        .catch((error) => {
-            console.log('Error sending message:', error);
-        }); 
+      for (const row of deviceResult.rows){
+        console.log('🔧 Enviando notificación a token:', row.frb_token);
+        admin.messaging().send({...msg, token: row.frb_token
+          })
+          .then((response) => {
+              console.log('Successfully sent message:', response);
+          })
+          .catch((error) => {
+              console.log('Error sending message:', error);
+          });   
+
+      }
+
+
 
     } catch (error) {
       if (dbClient) await dbClient.query('ROLLBACK');

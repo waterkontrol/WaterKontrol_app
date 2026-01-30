@@ -510,7 +510,7 @@ const procesarMensajesMqtt = () => {
         await dbClient.query('ROLLBACK');
         return;
       }
-      // const rgt_id = deviceResult.rows[0].rgt_id;
+      const rgt_id = deviceResult.rows[0].rgt_id;
       // const frb_token = deviceResult.rows[0].frb_token;
 
       // const telemetryInsert = `

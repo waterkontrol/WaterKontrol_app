@@ -432,7 +432,8 @@ console.log(req.body)
 
 app.post('/api/dispositivo/token', async (req, res) => {
 
-  await pool.query('UPDATE usuario SET frb_token = $1 WHERE correo = $2', [req.body.token, req.body.correo]); 
+  // await pool.query('UPDATE usuario SET frb_token = $1 WHERE correo = $2', [req.body.token, req.body.correo]); 
+  await pool.query('UPDATE sesion SET frb_token = $1 WHERE token = $2', [req.body.frb_token, req.body.text]);
 
   res.status(201).json({
       message: 'Dispositivo actualizado exitosamente.'
@@ -503,13 +504,14 @@ const procesarMensajesMqtt = () => {
       dbClient = await pool.connect();
       await dbClient.query('BEGIN');
 
-      const deviceResult = await dbClient.query('SELECT rgt_id, frb_token FROM registro join usuario on registro.usr_id = usuario.usr_id WHERE serial = $1', [serie]);
+      // const deviceResult = await dbClient.query('SELECT frb_token FROM sesion join usuario on sesion.usuario_id = usuario.usr_id WHERE serial = $1', [serie]);
+      const deviceResult = await dbClient.query('SELECT registro.rgt_id, sesion.frb_token FROM registro join sesion on registro.usr_id = sesion.usuario_id WHERE registro.serial = $1 AND sesion.frb_token IS NOT null', [serie]);
       if (deviceResult.rows.length === 0) {
         await dbClient.query('ROLLBACK');
         return;
       }
       const rgt_id = deviceResult.rows[0].rgt_id;
-      const frb_token = deviceResult.rows[0].frb_token;
+      // const frb_token = deviceResult.rows[0].frb_token;
 
       // const telemetryInsert = `
       //   INSERT INTO mensajes (rgt_id, data, status)
@@ -544,14 +546,20 @@ const procesarMensajesMqtt = () => {
 
       await dbClient.query('COMMIT');
 
-      admin.messaging().send({...msg, token: frb_token
-        })
-        .then((response) => {
-            console.log('Successfully sent message:', response);
-        })
-        .catch((error) => {
-            console.log('Error sending message:', error);
-        }); 
+      for (const row of deviceResult.rows){
+        console.log('🔧 Enviando notificación a token:', row.frb_token);
+        admin.messaging().send({...msg, token: row.frb_token
+          })
+          .then((response) => {
+              console.log('Successfully sent message:', response);
+          })
+          .catch((error) => {
+              console.log('Error sending message:', error);
+          });   
+
+      }
+
+
 
     } catch (error) {
       if (dbClient) await dbClient.query('ROLLBACK');

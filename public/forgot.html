@@ -8,16 +8,21 @@
 </head>
 <body>
   <div class="auth-container">
-    <h2>Recuperar Contraseña</h2>
-    <form id="forgotForm">
-      <label for="correo">Correo:</label>
-      <input type="email" id="correo" name="correo" placeholder="Ingresa tu correo registrado" required>
-
-      <button type="submit">Enviar Enlace de Recuperación</button>
-      <p id="message" style="margin-top: 15px;"></p>
+    <div class="auth-header">
+      <h2>Recuperar Contraseña</h2>
+      <p class="auth-subtitle">Ingresa tu correo para recibir instrucciones</p>
+    </div>
+    <form id="forgotForm" class="auth-form">
+      <div class="input-group">
+        <label for="correo">Correo</label>
+        <input type="email" id="correo" name="correo" placeholder="tu@email.com" required>
+      </div>
+      <button type="submit">Enviar Instrucciones</button>
+      <p id="message"></p>
     </form>
-    <div class="links">
-      <a href="/login.html">Volver al Login</a>
+    <div class="links links-horizontal">
+      <span class="link-text">¿Recordaste tu contraseña? </span>
+      <a href="/login.html" class="link-action">Iniciar Sesión</a>
     </div>
   </div>
 
@@ -26,7 +31,7 @@
       e.preventDefault();
       const message = document.getElementById('message');
       message.textContent = 'Enviando enlace...';
-      message.style.color = 'blue';
+      message.className = 'message-loading';
 
       const data = Object.fromEntries(new FormData(this).entries());
 
@@ -39,10 +44,10 @@
 
         const result = await res.json();
         message.textContent = result.message;
-        message.style.color = res.ok ? 'green' : 'red';
+        message.className = res.ok ? 'message-success' : 'message-error';
       } catch (err) {
         message.textContent = 'Error de red';
-        message.style.color = 'red';
+        message.className = 'message-error';
       }
     });
   </script>

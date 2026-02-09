@@ -8,20 +8,26 @@
 </head>
 <body>
   <div class="auth-container">
-    <h2>Iniciar Sesión</h2>
-    <form id="loginForm">
-      <label for="correo">Correo:</label>
-      <input type="email" id="correo" name="correo" required placeholder="tu@correo.com">
-
-      <label for="clave">Contraseña:</label>
-      <input type="password" id="clave" name="clave" required placeholder="Tu contraseña">
-
-      <button type="submit">Ingresar</button>
-      <p id="message" style="margin-top: 15px;"></p>
+    <div class="auth-header">
+      <h2>Iniciar Sesión</h2>
+      <p class="auth-subtitle">Ingresa tus credenciales para continuar</p>
+    </div>
+    <form id="loginForm" class="auth-form">
+      <div class="input-group">
+        <label for="correo">Email</label>
+        <input type="email" id="correo" name="correo" required placeholder="tu@email.com">
+      </div>
+      <div class="input-group">
+        <label for="clave">Contraseña</label>
+        <input type="password" id="clave" name="clave" required placeholder="••••••••">
+      </div>
+      <button type="submit">Iniciar Sesión</button>
+      <p id="message"></p>
+      <a href="/forgot.html">¿Olvidaste tu contraseña?</a>
     </form>
-    <div class="links">
-      <a href="/register.html">Crear cuenta</a>
-      <a href="/forgot.html">Olvidé mi contraseña</a>
+    <div class="links links-horizontal">
+      <span class="link-text">¿No tienes cuenta? </span>
+      <a href="/register.html" class="link-action">Regístrate</a>
     </div>
   </div>
   <script src="/variables.js"></script>
@@ -30,7 +36,7 @@
       e.preventDefault();
       const message = document.getElementById('message');
       message.textContent = 'Iniciando sesión...';
-      message.style.color = 'blue';
+      message.className = 'message-loading';
 
       const data = Object.fromEntries(new FormData(this).entries());
 
@@ -44,19 +50,19 @@
         const result = await res.json();
         console.log(result)
         if (res.ok) {
-          message.textContent = '✅ Redirigiendo...';
-          message.style.color = 'green';
+          message.textContent = 'Redirigiendo...';
+          message.className = 'message-success';
           sessionStorage.setItem('token', result.token);
           setTimeout(() => window.location.href = '/app.html', 1000);
         } else {
           message.textContent = result.message || 'Error desconocido';
-          message.style.color = 'red';
+          message.className = 'message-error';
         }
       } catch (err) {
         console.log(err);
         
         message.textContent = 'Error de red';
-        message.style.color = 'red';
+        message.className = 'message-error';
       }
     });
   </script>

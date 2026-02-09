@@ -4,17 +4,182 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>WaterKontrol – Mis dispositivos</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    /* Estilos específicos para la vista de dispositivos */
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: var(--text-color);
+      background-color: var(--background-color);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .app-header {
+      background-color: var(--card-background);
+      padding-top: calc(env(safe-area-inset-top, 0px) + 4px);
+      padding-right: 24px;
+      padding-bottom: 16px;
+      padding-left: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--input-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      width: 100%;
+      flex-shrink: 0;
+    }
+
+    .app-header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-color);
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .btn-add {
+      background-color: var(--primary-color);
+      color: var(--primary-foreground);
+      padding: 8px 16px;
+      height: 36px;
+      border: none;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: opacity 0.2s;
+    }
+
+    .btn-add:hover {
+      opacity: 0.9;
+    }
+
+    .btn-add-icon {
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .app-content {
+      padding: 24px;
+      max-width: 100%;
+      flex: 1;
+      width: 100%;
+    }
+
+    #loading {
+      text-align: center;
+      color: var(--muted-foreground);
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      padding: 24px 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-color);
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .empty-state a {
+      color: var(--primary-color);
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+
+    .empty-state a:hover {
+      opacity: 0.8;
+    }
+
+    #deviceList {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .device-card {
+      background-color: var(--card-background);
+      border: 1px solid var(--input-border);
+      border-radius: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      box-shadow: var(--shadow-light);
+    }
+
+    .device-info {
+      flex: 1;
+    }
+
+    .device-info strong {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-color);
+      font-family: 'Inter', sans-serif;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .device-info small {
+      font-size: 14px;
+      color: var(--muted-foreground);
+      font-family: 'Inter', sans-serif;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .device-badge {
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      text-transform: capitalize;
+    }
+
+    .device-badge.activo {
+      background-color: #DFE6E1;
+      color: #004D1A;
+    }
+
+    .device-badge.inactivo {
+      background-color: #E5DCDA;
+      color: #8C1C00;
+    }
+  </style>
 </head>
 <body>
-  <div class="d-flex justify-content-between align-items-center p-3 mb-3 border-bottom">
+  <div class="app-header">
     <h1>Mis dispositivos</h1>
-    <div>
-      <a href="/add_device.html" class="btn btn-primary">➕ Añadir</a>
-      </div>
+    <a href="/add_device.html" class="btn-add">
+      <span class="btn-add-icon">+</span>
+      <span>Añadir</span>
+    </a>
   </div>
 
-  <main class="container">
+  <main class="app-content">
     <p id="loading">Cargando dispositivos...</p>
     <div id="deviceList"></div>
   </main>
@@ -25,9 +190,6 @@
       const list = document.getElementById('deviceList');
 
       try {
-        // const res = await fetch(`${RAILWAY_API_URL}/api/dispositivos`);
-        // console.log('Respuesta de /api/dispositivos 1:', JSON.stringify(res), res.ok);
-
         if(!sessionStorage.getItem('token')) {
           setTimeout(() => window.location.href = '/login.html', 1000);
           throw new Error('No autorizado: token no encontrado. Por favor, inicia sesión.');
@@ -39,73 +201,51 @@
           }
          )
           .then(response => {
-            if (!response.ok) { // Check for successful HTTP status (200-299)
+            if (!response.ok) {
               throw new Error(`HTTP error! status: ${response.status}`);
             }
-            return response.json(); // Parse the JSON data
+            return response.json();
           })
           .then(data => {
-            // 'data' is now a JavaScript object
             console.log(data);
             
-            // Si el servidor regresó HTML, el error ocurre AQUÍ
             const devices = data; 
 
             loading.style.display = 'none';
 
             if (!devices.length) {
-              list.innerHTML = '<p>No tienes dispositivos. <a href="/add_device.html">Añade el primero</a>.</p>';
+              list.innerHTML = '<div class="empty-state"><p>No tienes dispositivos. <a href="/add_device.html">Añade el primero</a>.</p></div>';
               return;
             }
 
             list.innerHTML = devices.map(d => `
-              <div class="card ${d.estatus} p-3">
-                <div>
-                  <strong>${d.modelo}</strong> (${d.serie})<br>
-                  <small>${d.tipo} – ${d.marca}</small><br>
+              <div class="device-card">
+                <div class="device-info">
+                  <strong>${d.modelo}</strong>
+                  <small>${d.serie}</small>
+                  <small>${d.tipo} – ${d.marca}</small>
                   <small>Topic: ${d.topic}</small>
                 </div>
-                <span class="badge">${d.estatus}</span>
+                <span class="device-badge ${d.estatus}">${d.estatus}</span>
               </div>
             `).join('');
           })
           .catch(error => {
             console.error('Error:', error);
+            loading.textContent = 'Error al cargar dispositivos: ' + error.message;
+            loading.style.color = '#8C1C00';
           });
-
-        // ❌ Línea Eliminada (o Comentada): if (!res.ok) throw new Error('No autorizado'); 
-        // Si el servidor envía HTML, res.ok será TRUE (Status 200), pero el JSON.parse fallará.
-        // Pero si el ensureAuthenticated está comentado en el backend, esto NO es necesario.
-
-        // if (!res.ok) { // Dejamos esto solo para manejar errores 40x si la API falla de otra forma
-        //    throw new Error('Error en la API de dispositivos'); 
-        // }
 
         
       } catch (err) {
-        loading.textContent = '❌ Error al cargar dispositivos: ' + err.message;
+        loading.textContent = 'Error al cargar dispositivos: ' + err.message;
+        loading.style.color = '#8C1C00';
         console.error(err);
       }
     }
 
     // Inicializar la carga
     loadDevices();
-
-    // Lógica para el botón de Cerrar Sesión (Comentada para pruebas sin login)
-    // document.getElementById('logoutBtn').addEventListener('click', async () => {
-    //     try {
-    //         const response = await fetch(`${RAILWAY_API_URL}/auth/logout`, {
-    //             method: 'POST'
-    //         });
-    //         if (response.ok) {
-    //             window.location.href = '/login.html'; 
-    //         } else {
-    //             alert('Error al cerrar la sesión.');
-    //         }
-    //     } catch (error) {
-    //         console.error('Error de red al cerrar sesión:', error);
-    //     }
-    // });
   </script>
 </body>
 </html>

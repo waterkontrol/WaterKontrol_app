@@ -8,22 +8,29 @@
 </head>
 <body>
   <div class="auth-container">
-    <h2>Crear Cuenta</h2>
-    <form id="registerForm">
-      <label for="nombre">Nombre Completo:</label>
-      <input type="text" id="nombre" name="nombre" required>
-
-      <label for="correo">Correo:</label>
-      <input type="email" id="correo" name="correo" required>
-
-      <label for="clave">Contraseña:</label>
-      <input type="password" id="clave" name="clave" required>
-
+    <div class="auth-header">
+      <h2>Crear Cuenta</h2>
+      <p class="auth-subtitle">Completa tus datos para registrarte</p>
+    </div>
+    <form id="registerForm" class="auth-form">
+      <div class="input-group">
+        <label for="nombre">Nombre Completo</label>
+        <input type="text" id="nombre" name="nombre" required placeholder="Juan Pérez">
+      </div>
+      <div class="input-group">
+        <label for="correo">Correo</label>
+        <input type="email" id="correo" name="correo" required placeholder="tu@email.com">
+      </div>
+      <div class="input-group">
+        <label for="clave">Contraseña</label>
+        <input type="password" id="clave" name="clave" required placeholder="••••••••">
+      </div>
       <button type="submit">Registrarse</button>
-      <p id="message" style="margin-top: 15px;"></p>
+      <p id="message"></p>
     </form>
-    <div class="links">
-      <a href="/login.html">Ya tengo cuenta</a>
+    <div class="links links-horizontal">
+      <span class="link-text">¿Ya tienes cuenta? </span>
+      <a href="/login.html" class="link-action">Iniciar Sesión</a>
     </div>
   </div>
 
@@ -32,7 +39,7 @@
       e.preventDefault();
       const message = document.getElementById('message');
       message.textContent = 'Registrando...';
-      message.style.color = 'blue';
+      message.className = 'message-loading';
 
       const data = Object.fromEntries(new FormData(this).entries());
 
@@ -45,16 +52,16 @@
 
         const result = await res.json();
         if (res.ok) {
-          message.textContent = '✅ Usuario registrado. Redirigiendo...';
-          message.style.color = 'green';
+          message.textContent = 'Usuario registrado. Redirigiendo...';
+          message.className = 'message-success';
           setTimeout(() => window.location.href = '/login.html', 2000);
         } else {
           message.textContent = result.message || 'Error desconocido';
-          message.style.color = 'red';
+          message.className = 'message-error';
         }
       } catch (err) {
         message.textContent = 'Error de red';
-        message.style.color = 'red';
+        message.className = 'message-error';
       }
     });
   </script>

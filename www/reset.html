@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaterKontrol - Nueva Contraseña</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="auth-container">
+    <h2>Nueva Contraseña</h2>
+    <form id="resetForm">
+      <label for="nuevaClave">Nueva Contraseña:</label>
+      <input type="password" id="nuevaClave" name="nuevaClave" required>
+
+      <button type="submit">Restablecer Contraseña</button>
+      <p id="message" style="margin-top: 15px;"></p>
+    </form>
+    <div class="links">
+      <a href="/login.html">Volver al Login</a>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+
+    if (!token) {
+      document.getElementById('message').textContent = 'Token inválido o faltante.';
+      document.getElementById('message').style.color = 'red';
+      document.getElementById('resetForm').style.display = 'none';
+    }
+
+    document.getElementById('resetForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const message = document.getElementById('message');
+      message.textContent = 'Restableciendo...';
+      message.style.color = 'blue';
+
+      const data = { token, nuevaClave: document.getElementById('nuevaClave').value };
+
+      try {
+        const res = await fetch(`${RAILWAY_API_URL}/auth/reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const result = await res.json();
+        message.textContent = result.message;
+        message.style.color = res.ok ? 'green' : 'red';
+
+        if (res.ok) {
+          setTimeout(() => window.location.href = '/login.html', 2000);
+        }
+      } catch (err) {
+        message.textContent = 'Error de red';
+        message.style.color = 'red';
+      }
+    });
+  </script>
+  <script src="/variables.js"></script>
+</body>
+</html>

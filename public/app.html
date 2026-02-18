@@ -127,6 +127,17 @@
       justify-content: space-between;
       align-items: flex-start;
       box-shadow: var(--shadow-light);
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .device-card:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .device-card:active {
+      transform: translateY(0);
     }
 
     .device-info {
@@ -195,19 +206,42 @@
           throw new Error('No autorizado: token no encontrado. Por favor, inicia sesión.');
         }
 
+         console.log('🔍 Iniciando carga de dispositivos...');
+         console.log('🔍 URL de API:', `${RAILWAY_API_URL}/api/dispositivos`);
+         console.log('🔍 Token disponible:', sessionStorage.getItem('token') ? 'Sí' : 'No');
+
          fetch(`${RAILWAY_API_URL}/api/dispositivos`,
           {
             headers: {Authorization: 'Bearer ' + sessionStorage.getItem('token')}
           }
          )
           .then(response => {
+            console.log('🔍 Respuesta HTTP:', {
+              status: response.status,
+              statusText: response.statusText,
+              ok: response.ok
+            });
             if (!response.ok) {
               throw new Error(`HTTP error! status: ${response.status}`);
             }
             return response.json();
           })
           .then(data => {
-            console.log(data);
+            console.log('📦 Datos recibidos (raw):', data);
+            console.log('📦 Cantidad de dispositivos:', data.length);
+            
+            if (data.length > 0) {
+              console.log('📦 Primer dispositivo (raw):', data[0]);
+              console.log('📦 Campos del primer dispositivo:', {
+                modelo: data[0].modelo,
+                serie: data[0].serie,
+                tipo: data[0].tipo,
+                marca: data[0].marca,
+                topic: data[0].topic,
+                estatus: data[0].estatus,
+                nombre: data[0].nombre
+              });
+            }
             
             const devices = data; 
 
@@ -219,7 +253,7 @@
             }
 
             list.innerHTML = devices.map(d => `
-              <div class="device-card">
+              <div class="device-card" onclick="window.location.href='/device.html?serie=${encodeURIComponent(d.serie)}'">
                 <div class="device-info">
                   <strong>${d.modelo}</strong>
                   <small>${d.serie}</small>

@@ -159,6 +159,8 @@ const isAuth = (req, res, next) => {
 // CONFIGURACIÓN DE NODEMAILER
 // ===================================================================================
 
+const RAILWAY_API_URL = process.env.RAILWAY_API_URL || process.env.RAILWAY_PUBLIC_DOMAIN || 'http://localhost:3000';
+
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -461,6 +463,149 @@ app.post('/api/dispositivo/refresh', async (req, res) => {
   
 });
 
+// GET /api/dispositivo/horarios/activo/:serial (Obtener estado activo de horarios)
+app.get('/api/dispositivo/horarios/activo/:serial', async (req, res) => {
+  const { serial } = req.params;
+  
+  if (!serial) {
+    return res.status(400).json({ 
+      message: 'Serial requerido' 
+    });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    
+    // Verificar si existe algún horario con activo = true para este serial
+    const result = await client.query(
+      'SELECT COUNT(*) as count FROM horarios WHERE serial = $1 AND activo = true',
+      [serial]
+    );
+    
+    const tieneHorariosActivos = parseInt(result.rows[0].count) > 0;
+    
+    return res.status(200).json({ 
+      activo: tieneHorariosActivos
+    });
+  } catch (error) {
+    console.error('❌ Error al verificar estado de horarios:', error);
+    res.status(500).json({ 
+      message: 'Error interno al verificar estado de horarios.',
+      error: error.message 
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// PUT /api/dispositivo/horarios/activo/:serial (Activar/Desactivar horarios para un serial)
+app.put('/api/dispositivo/horarios/activo/:serial', async (req, res) => {
+  const { serial } = req.params;
+  const { activo } = req.body;
+  
+  if (!serial || activo === undefined) {
+    return res.status(400).json({ 
+      message: 'Serial y activo son requeridos' 
+    });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    
+    // Actualizar todos los horarios del serial
+    await client.query(
+      `UPDATE horarios SET activo = $1 WHERE serial = $2`,
+      [activo, serial]
+    );
+    
+    console.log(`✅ Horarios ${activo ? 'activados' : 'desactivados'} para serial: ${serial}`);
+    return res.status(200).json({ 
+      message: `Horarios ${activo ? 'activados' : 'desactivados'} exitosamente.`,
+      activo: activo
+    });
+  } catch (error) {
+    console.error('❌ Error al actualizar estado de horarios:', error);
+    res.status(500).json({ 
+      message: 'Error interno al actualizar estado de horarios.',
+      error: error.message 
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// POST /api/dispositivo/horarios (Guardar horario)
+app.post('/api/dispositivo/horarios', async (req, res) => {
+  const { horario_id, serial, dias_semana, hora_inicio, hora_fin, activo } = req.body;
+  
+  if (!serial || !dias_semana || !hora_inicio || !hora_fin || activo === undefined) {
+    return res.status(400).json({ 
+      message: 'Faltan datos requeridos: serial, dias_semana, hora_inicio, hora_fin, activo' 
+    });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    
+    // Si activo es false, NO hacer nada (no guardar, no eliminar)
+    if (activo === false) {
+      return res.status(200).json({ 
+        message: 'Horarios desactivados. No se guardó el horario.',
+        horario_id: null
+      });
+    }
+
+    // Si horario_id es null, insertar nuevo horario
+    if (!horario_id) {
+      const result = await client.query(
+        `INSERT INTO horarios (serial, dias_semana, hora_inicio, hora_fin, activo) 
+         VALUES ($1, $2, $3, $4, $5) 
+         RETURNING horario_id`,
+        [serial, dias_semana, hora_inicio, hora_fin, activo]
+      );
+      
+      // Si se guarda un horario con activo = true, activar todos los horarios de este serial
+      if (activo === true) {
+        await client.query(
+          `UPDATE horarios SET activo = true WHERE serial = $1`,
+          [serial]
+        );
+        console.log(`✅ Todos los horarios del serial ${serial} han sido activados`);
+      }
+      
+      console.log(`✅ Horario creado para serial: ${serial}, horario_id: ${result.rows[0].horario_id}`);
+      return res.status(201).json({ 
+        message: 'Horario guardado exitosamente.',
+        horario_id: result.rows[0].horario_id
+      });
+    } else {
+      // Actualizar horario existente
+      await client.query(
+        `UPDATE horarios 
+         SET dias_semana = $1, hora_inicio = $2, hora_fin = $3, activo = $4 
+         WHERE horario_id = $5 AND serial = $6`,
+        [dias_semana, hora_inicio, hora_fin, activo, horario_id, serial]
+      );
+      
+      console.log(`✅ Horario actualizado: horario_id ${horario_id} para serial: ${serial}`);
+      return res.status(200).json({ 
+        message: 'Horario actualizado exitosamente.',
+        horario_id: horario_id
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error al guardar horario:', error);
+    res.status(500).json({ 
+      message: 'Error interno al guardar el horario.',
+      error: error.message 
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
 
 // ===================================================================================
 // PROCESAMIENTO DE MENSAJES MQTT
@@ -551,10 +696,23 @@ const procesarMensajesMqtt = () => {
         admin.messaging().send({...msg, token: row.frb_token
           })
           .then((response) => {
-              console.log('Successfully sent message:', response);
+              console.log('✅ Notificación enviada exitosamente:', response);
           })
-          .catch((error) => {
-              console.log('Error sending message:', error);
+          .catch(async (error) => {
+              // Si el token no está registrado o es inválido, limpiarlo de la base de datos
+              if (error.code === 'messaging/registration-token-not-registered' || 
+                  error.code === 'messaging/invalid-registration-token' ||
+                  error.code === 'messaging/invalid-argument') {
+                console.warn(`⚠️ Token inválido detectado, limpiando de la base de datos: ${row.frb_token.substring(0, 20)}...`);
+                try {
+                  await pool.query('UPDATE sesion SET frb_token = NULL WHERE frb_token = $1', [row.frb_token]);
+                  console.log('✅ Token inválido eliminado de la base de datos');
+                } catch (dbError) {
+                  console.error('❌ Error al limpiar token inválido:', dbError);
+                }
+              } else {
+                console.error('❌ Error enviando notificación:', error.code, error.message);
+              }
           });   
 
       }
@@ -605,6 +763,125 @@ const marcarOfflineSiNoReportan = async () => {
 setInterval(marcarOfflineSiNoReportan, 60000); // Cada 60 segundos
 
 // ===================================================================================
+// EJECUCIÓN DE HORARIOS
+// ===================================================================================
+
+const ejecutarHorarios = async () => {
+  if (!mqttClient) return;
+  
+  let client;
+  try {
+    client = await pool.connect();
+    
+    // Obtener todos los horarios activos (activo = true)
+    const horariosResult = await client.query(
+      `SELECT h.*, r.topic 
+       FROM horarios h
+       JOIN registro r ON h.serial = r.serial
+       WHERE h.activo = true`
+    );
+    
+    if (horariosResult.rows.length === 0) {
+      // No hay horarios activos, no hacer nada (activo = false)
+      return;
+    }
+    
+    // Si hay horarios activos, ejecutar la lógica
+    const ahora = new Date();
+    const diaSemanaActual = ahora.getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+    const horaActual = ahora.getHours();
+    const minutoActual = ahora.getMinutes();
+    const horaActualStr = `${horaActual.toString().padStart(2, '0')}:${minutoActual.toString().padStart(2, '0')}`;
+    
+    // Mapear días de la semana: L=1, M=2, X=3, J=4, V=5, S=6, D=0
+    const diaMap = { 'L': 1, 'M': 2, 'X': 3, 'J': 4, 'V': 5, 'S': 6, 'D': 0 };
+    
+    // Agrupar horarios por serial para evitar conflictos
+    const horariosPorSerial = {};
+    for (const horario of horariosResult.rows) {
+      if (!horariosPorSerial[horario.serial]) {
+        horariosPorSerial[horario.serial] = [];
+      }
+      horariosPorSerial[horario.serial].push(horario);
+    }
+    
+    for (const serial in horariosPorSerial) {
+      const horarios = horariosPorSerial[serial];
+      const topic = horarios[0].topic;
+      let debeActivar = false;
+      
+      // Verificar si algún horario está activo en este momento
+      for (const horario of horarios) {
+        const diasSemana = horario.dias_semana.split(',');
+        const horaInicio = horario.hora_inicio;
+        const horaFin = horario.hora_fin;
+        
+        // Verificar si el día actual está en los días programados
+        const diaActualLetra = Object.keys(diaMap).find(key => diaMap[key] === diaSemanaActual);
+        const diaCoincide = diasSemana.includes(diaActualLetra);
+        
+        if (diaCoincide) {
+          // Comparar horas (formato HH:MM)
+          const estaDentroDelHorario = horaActualStr >= horaInicio && horaActualStr < horaFin;
+          if (estaDentroDelHorario) {
+            debeActivar = true;
+            break; // Si encuentra un horario activo, activar el dispositivo
+          }
+        }
+      }
+      
+      // Ejecutar acción según el horario
+      const message = JSON.stringify({
+        "bomba": debeActivar ? "encendida" : "apagada",
+        "valvula": debeActivar ? "abierta" : "cerrada"
+      });
+      
+      const topicIn = topic.concat('/in');
+      mqttClient.publish(topicIn, message, { qos: 0, retain: false }, (err) => {
+        if (!err) {
+          console.log(`✅ [HORARIOS] Dispositivo ${serial} ${debeActivar ? 'activado' : 'desactivado'} por horario`);
+        } else {
+          console.error(`❌ [HORARIOS] Error al controlar dispositivo ${serial}:`, err);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error al ejecutar horarios:', error);
+  } finally {
+    if (client) client.release();
+  }
+};
+
+// Ejecutar horarios cada minuto
+let horariosInterval = null;
+const iniciarEjecucionHorarios = () => {
+  try {
+    console.log('🔄 Iniciando sistema de ejecución de horarios...');
+    
+    if (horariosInterval) {
+      clearInterval(horariosInterval);
+    }
+    
+    // Ejecutar inmediatamente al iniciar (sin await para no bloquear)
+    ejecutarHorarios().catch(err => {
+      console.error('❌ Error en ejecución inicial de horarios:', err);
+    });
+    
+    // Ejecutar cada minuto (60000 ms)
+    horariosInterval = setInterval(() => {
+      ejecutarHorarios().catch(err => {
+        console.error('❌ Error en ejecución periódica de horarios:', err);
+      });
+    }, 60000);
+    
+    console.log('✅ Sistema de ejecución de horarios iniciado (verificación cada minuto)');
+  } catch (error) {
+    console.error('❌ Error al iniciar ejecución de horarios:', error);
+    console.error('Stack trace:', error.stack);
+  }
+};
+
+// ===================================================================================
 // RUTAS ADICIONALES Y SERVIDOR DE ARCHIVOS ESTÁTICOS (FRONTEND)
 // ===================================================================================
 
@@ -641,17 +918,29 @@ app.use(express.static(path.join(__dirname, 'www')));
 const PORT = process.env.PORT || 8081;
 
 const initializeApplicationServices = async () => {
-
-  await connectMqtt();
-  const dbConnected = await testDatabaseConnection();
-  if (!dbConnected) {
-    console.error('❌ No se pudo conectar a la base de datos. Las funciones de autenticación y DB fallarán.');
-  } else {
-    try {
-      procesarMensajesMqtt();
-    } catch (error) {
-      console.error('❌ Error iniciando MQTT:', error);
+  console.log('🔄 [DEBUG] initializeApplicationServices iniciado...');
+  try {
+    console.log('🔄 [DEBUG] Conectando MQTT...');
+    await connectMqtt();
+    console.log('🔄 [DEBUG] Probando conexión a BD...');
+    const dbConnected = await testDatabaseConnection();
+    if (!dbConnected) {
+      console.error('❌ No se pudo conectar a la base de datos. Las funciones de autenticación y DB fallarán.');
+    } else {
+      try {
+        console.log('🔄 [DEBUG] Iniciando procesarMensajesMqtt...');
+        procesarMensajesMqtt();
+        console.log('🔄 [DEBUG] Llamando a iniciarEjecucionHorarios...');
+        iniciarEjecucionHorarios(); // Iniciar ejecución de horarios
+        console.log('🔄 [DEBUG] iniciarEjecucionHorarios llamado exitosamente');
+      } catch (error) {
+        console.error('❌ Error iniciando servicios MQTT/Horarios:', error);
+        console.error('Stack trace:', error.stack);
+      }
     }
+  } catch (error) {
+    console.error('❌ Error en initializeApplicationServices:', error);
+    console.error('Stack trace:', error.stack);
   }
 };
 
@@ -660,7 +949,7 @@ const startServer = () => {
   const host = isProduction ? '0.0.0.0' : 'localhost';
 
   app.listen(PORT, host, () => {
-    console.log(`✅ Servidor Express ejecutándose en ${host}:${PORT}`);
+    console.log(`✅ Servidor Express ejecutándosee en ${host}:${PORT}`);
   });
 };
 

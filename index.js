@@ -674,6 +674,47 @@ app.get('/api/dispositivo/horarios/activo-ahora/:serial', async (req, res) => {
   }
 });
 
+// PUT /api/dispositivo/horarios/:horario_id (Actualizar horario)
+app.put('/api/dispositivo/horarios/:horario_id', async (req, res) => {
+  const { horario_id } = req.params;
+  const { dias_semana, hora_inicio, hora_fin, activo } = req.body;
+
+  if (!horario_id || !dias_semana || !hora_inicio || !hora_fin || activo === undefined) {
+    return res.status(400).json({
+      message: 'Faltan datos requeridos: horario_id, dias_semana, hora_inicio, hora_fin, activo'
+    });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `UPDATE horarios
+       SET dias_semana = $1, hora_inicio = $2, hora_fin = $3, activo = $4
+       WHERE horario_id = $5
+       RETURNING horario_id`,
+      [dias_semana, hora_inicio, hora_fin, activo, horario_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Horario no encontrado.' });
+    }
+
+    return res.status(200).json({
+      message: 'Horario actualizado exitosamente.',
+      horario_id: result.rows[0].horario_id
+    });
+  } catch (error) {
+    console.error('❌ Error al actualizar horario:', error);
+    return res.status(500).json({
+      message: 'Error interno al actualizar el horario.',
+      error: error.message
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 // GET /api/dispositivo/horarios/:serial (Listar horarios guardados)
 app.get('/api/dispositivo/horarios/:serial', async (req, res) => {
   const { serial } = req.params;

@@ -1062,8 +1062,8 @@ const ejecutarHorarios = async () => {
       }
 
       const message = JSON.stringify({
-        "valvula": debeActivar ? "abierta" : "cerrada",
-        "bomba": "apagada"
+        "valvula": debeActivar ? "cerrada" : "abierta",
+        "bomba": debeActivar ? "encendida" : "apagada"
       });
       console.log(`📤 [HORARIOS] Enviando a MQTT ${topicIn}: ${message}`);
       mqttClient.publish(topicIn, message, { qos: 1, retain: false }, (err) => {

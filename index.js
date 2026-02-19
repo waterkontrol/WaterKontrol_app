@@ -607,6 +607,184 @@ app.post('/api/dispositivo/horarios', async (req, res) => {
   }
 });
 
+// GET /api/dispositivo/horarios/activo-ahora/:serial (Horario activo actual)
+app.get('/api/dispositivo/horarios/activo-ahora/:serial', async (req, res) => {
+  const { serial } = req.params;
+
+  if (!serial) {
+    return res.status(400).json({
+      message: 'Serial requerido'
+    });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT horario_id, dias_semana, hora_inicio, hora_fin, activo
+       FROM horarios
+       WHERE serial = $1 AND activo = true`,
+      [serial]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(200).json({ activo: false, horario: null });
+    }
+
+    const ahora = new Date();
+    const diaSemanaActual = ahora.getDay(); // 0=Domingo, 1=Lunes, ..., 6=Sábado
+    const horaActual = ahora.getHours();
+    const minutoActual = ahora.getMinutes();
+    const horaActualStr = `${horaActual.toString().padStart(2, '0')}:${minutoActual.toString().padStart(2, '0')}`;
+
+    // Mapear días de la semana: L=1, M=2, X=3, J=4, V=5, S=6, D=0
+    const diaMap = { L: 1, M: 2, X: 3, J: 4, V: 5, S: 6, D: 0 };
+    const diaActualLetra = Object.keys(diaMap).find(key => diaMap[key] === diaSemanaActual);
+
+    let horarioActivo = null;
+    for (const horario of result.rows) {
+      const diasSemana = (horario.dias_semana || '').split(',').filter(Boolean);
+      const diaCoincide = diasSemana.includes(diaActualLetra);
+      if (!diaCoincide) continue;
+      const estaDentroDelHorario = horaActualStr >= horario.hora_inicio && horaActualStr < horario.hora_fin;
+      if (estaDentroDelHorario) {
+        horarioActivo = horario;
+        break;
+      }
+    }
+
+    return res.status(200).json({
+      activo: Boolean(horarioActivo),
+      horario: horarioActivo
+        ? {
+            dias_semana: horarioActivo.dias_semana,
+            hora_inicio: horarioActivo.hora_inicio,
+            hora_fin: horarioActivo.hora_fin
+          }
+        : null
+    });
+  } catch (error) {
+    console.error('❌ Error al obtener horario activo actual:', error);
+    return res.status(500).json({
+      message: 'Error interno al obtener horario activo actual.',
+      error: error.message
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// GET /api/dispositivo/horarios/:serial (Listar horarios guardados)
+app.get('/api/dispositivo/horarios/:serial', async (req, res) => {
+  const { serial } = req.params;
+
+  if (!serial) {
+    return res.status(400).json({
+      message: 'Serial requerido'
+    });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT horario_id, serial, dias_semana, hora_inicio, hora_fin, activo
+       FROM horarios
+       WHERE serial = $1
+       ORDER BY horario_id ASC`,
+      [serial]
+    );
+
+    return res.status(200).json({
+      horarios: result.rows
+    });
+  } catch (error) {
+    console.error('❌ Error al obtener horarios:', error);
+    return res.status(500).json({
+      message: 'Error interno al obtener horarios.',
+      error: error.message
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// DELETE /api/dispositivo/horarios/:horario_id (Eliminar horario)
+app.delete('/api/dispositivo/horarios/:horario_id', async (req, res) => {
+  const { horario_id } = req.params;
+
+  if (!horario_id) {
+    return res.status(400).json({
+      message: 'horario_id requerido'
+    });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `DELETE FROM horarios WHERE horario_id = $1 RETURNING horario_id`,
+      [horario_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Horario no encontrado.' });
+    }
+
+    return res.status(200).json({
+      message: 'Horario eliminado exitosamente.',
+      horario_id: result.rows[0].horario_id
+    });
+  } catch (error) {
+    console.error('❌ Error al eliminar horario:', error);
+    return res.status(500).json({
+      message: 'Error interno al eliminar horario.',
+      error: error.message
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// PATCH /api/dispositivo/horarios/:horario_id (Actualizar activo de un horario)
+app.patch('/api/dispositivo/horarios/:horario_id', async (req, res) => {
+  const { horario_id } = req.params;
+  const { activo } = req.body;
+
+  if (!horario_id || activo === undefined) {
+    return res.status(400).json({
+      message: 'horario_id y activo son requeridos'
+    });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `UPDATE horarios SET activo = $1 WHERE horario_id = $2 RETURNING horario_id, activo`,
+      [activo, horario_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Horario no encontrado.' });
+    }
+
+    return res.status(200).json({
+      message: 'Horario actualizado exitosamente.',
+      horario_id: result.rows[0].horario_id,
+      activo: result.rows[0].activo
+    });
+  } catch (error) {
+    console.error('❌ Error al actualizar horario:', error);
+    return res.status(500).json({
+      message: 'Error interno al actualizar horario.',
+      error: error.message
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 // ===================================================================================
 // PROCESAMIENTO DE MENSAJES MQTT
 // ===================================================================================

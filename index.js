@@ -1027,7 +1027,7 @@ const ejecutarHorarios = async () => {
     for (const serial in horariosPorSerial) {
       const horarios = horariosPorSerial[serial];
       const topic = horarios[0].topic;
-      const topicOut = topic.concat('/out');
+      const topicIn = topic.concat('/in');
       
       // Verificar si inicia o termina algún horario en este momento
       for (const horario of horarios) {
@@ -1046,7 +1046,7 @@ const ejecutarHorarios = async () => {
             "valvula": "abierta",
             "bomba": "apagada"
           });
-          mqttClient.publish(topicOut, messageInicio, { qos: 0, retain: false }, (err) => {
+          mqttClient.publish(topicIn, messageInicio, { qos: 0, retain: false }, (err) => {
             if (!err) {
               console.log(`✅ [HORARIOS] Dispositivo ${serial} inicio horario (${horaInicio})`);
             } else {
@@ -1060,7 +1060,7 @@ const ejecutarHorarios = async () => {
             "valvula": "cerrada",
             "bomba": "prendida"
           });
-          mqttClient.publish(topicOut, messageFin, { qos: 0, retain: false }, (err) => {
+          mqttClient.publish(topicIn, messageFin, { qos: 0, retain: false }, (err) => {
             if (!err) {
               console.log(`✅ [HORARIOS] Dispositivo ${serial} fin horario (${horaFin})`);
             } else {

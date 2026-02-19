@@ -1046,7 +1046,8 @@ const ejecutarHorarios = async () => {
             "valvula": "abierta",
             "bomba": "apagada"
           });
-          mqttClient.publish(topicIn, messageInicio, { qos: 0, retain: false }, (err) => {
+          console.log(`📤 [HORARIOS] Enviando a MQTT ${topicIn}: ${messageInicio}`);
+          mqttClient.publish(topicIn, messageInicio, { qos: 1, retain: false }, (err) => {
             if (!err) {
               console.log(`✅ [HORARIOS] Dispositivo ${serial} inicio horario (${horaInicio})`);
             } else {
@@ -1060,7 +1061,8 @@ const ejecutarHorarios = async () => {
             "valvula": "cerrada",
             "bomba": "prendida"
           });
-          mqttClient.publish(topicIn, messageFin, { qos: 0, retain: false }, (err) => {
+          console.log(`📤 [HORARIOS] Enviando a MQTT ${topicIn}: ${messageFin}`);
+          mqttClient.publish(topicIn, messageFin, { qos: 1, retain: false }, (err) => {
             if (!err) {
               console.log(`✅ [HORARIOS] Dispositivo ${serial} fin horario (${horaFin})`);
             } else {

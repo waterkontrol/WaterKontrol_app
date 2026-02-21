@@ -538,12 +538,46 @@ app.put('/api/dispositivo/horarios/activo/:serial', async (req, res) => {
 
 // POST /api/dispositivo/horarios (Guardar horario)
 app.post('/api/dispositivo/horarios', async (req, res) => {
-  const { horario_id, serial, dias_semana, hora_inicio, hora_fin, activo } = req.body;
+  let { horario_id, serial, dias_semana, hora_inicio, hora_fin, activo, tz_offset } = req.body;
   
   if (!serial || !dias_semana || !hora_inicio || !hora_fin || activo === undefined) {
     return res.status(400).json({ 
       message: 'Faltan datos requeridos: serial, dias_semana, hora_inicio, hora_fin, activo' 
     });
+  }
+
+  // Si viene tz_offset, convertir horario local a UTC antes de guardar
+  if (tz_offset !== undefined && tz_offset !== null) {
+    const dayOrder = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+    const shiftDays = (daysArr, delta) =>
+      daysArr.map(d => {
+        const idx = dayOrder.indexOf(d);
+        if (idx === -1) return null;
+        return dayOrder[(idx + delta + 7) % 7];
+      }).filter(Boolean);
+
+    const toUtc = (timeStr, offsetMin) => {
+      const [h, m] = timeStr.split(':').map(n => parseInt(n, 10));
+      const total = h * 60 + m + offsetMin;
+      const delta = Math.floor(total / 1440);
+      const norm = ((total % 1440) + 1440) % 1440;
+      const hh = String(Math.floor(norm / 60)).padStart(2, '0');
+      const mm = String(norm % 60).padStart(2, '0');
+      return { time: `${hh}:${mm}`, delta };
+    };
+
+    const daysArr = dias_semana.split(',').filter(Boolean);
+    const startUtc = toUtc(hora_inicio, parseInt(tz_offset, 10));
+    const endUtc = toUtc(hora_fin, parseInt(tz_offset, 10));
+    const daySet = new Set();
+    shiftDays(daysArr, startUtc.delta).forEach(d => daySet.add(d));
+    if (endUtc.delta !== startUtc.delta) {
+      shiftDays(daysArr, endUtc.delta).forEach(d => daySet.add(d));
+    }
+
+    dias_semana = Array.from(daySet).join(',');
+    hora_inicio = startUtc.time;
+    hora_fin = endUtc.time;
   }
 
   let client;
@@ -677,12 +711,46 @@ app.get('/api/dispositivo/horarios/activo-ahora/:serial', async (req, res) => {
 // PUT /api/dispositivo/horarios/:horario_id (Actualizar horario)
 app.put('/api/dispositivo/horarios/:horario_id', async (req, res) => {
   const { horario_id } = req.params;
-  const { dias_semana, hora_inicio, hora_fin, activo } = req.body;
+  let { dias_semana, hora_inicio, hora_fin, activo, tz_offset } = req.body;
 
   if (!horario_id || !dias_semana || !hora_inicio || !hora_fin || activo === undefined) {
     return res.status(400).json({
       message: 'Faltan datos requeridos: horario_id, dias_semana, hora_inicio, hora_fin, activo'
     });
+  }
+
+  // Si viene tz_offset, convertir horario local a UTC antes de guardar
+  if (tz_offset !== undefined && tz_offset !== null) {
+    const dayOrder = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+    const shiftDays = (daysArr, delta) =>
+      daysArr.map(d => {
+        const idx = dayOrder.indexOf(d);
+        if (idx === -1) return null;
+        return dayOrder[(idx + delta + 7) % 7];
+      }).filter(Boolean);
+
+    const toUtc = (timeStr, offsetMin) => {
+      const [h, m] = timeStr.split(':').map(n => parseInt(n, 10));
+      const total = h * 60 + m + offsetMin;
+      const delta = Math.floor(total / 1440);
+      const norm = ((total % 1440) + 1440) % 1440;
+      const hh = String(Math.floor(norm / 60)).padStart(2, '0');
+      const mm = String(norm % 60).padStart(2, '0');
+      return { time: `${hh}:${mm}`, delta };
+    };
+
+    const daysArr = (dias_semana || '').split(',').filter(Boolean);
+    const startUtc = toUtc(hora_inicio, parseInt(tz_offset, 10));
+    const endUtc = toUtc(hora_fin, parseInt(tz_offset, 10));
+    const daySet = new Set();
+    shiftDays(daysArr, startUtc.delta).forEach(d => daySet.add(d));
+    if (endUtc.delta !== startUtc.delta) {
+      shiftDays(daysArr, endUtc.delta).forEach(d => daySet.add(d));
+    }
+
+    dias_semana = Array.from(daySet).join(',');
+    hora_inicio = startUtc.time;
+    hora_fin = endUtc.time;
   }
 
   let client;

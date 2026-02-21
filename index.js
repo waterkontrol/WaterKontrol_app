@@ -1007,9 +1007,10 @@ const ejecutarHorarios = async () => {
     
     // Si hay horarios activos, ejecutar la lógica
     const ahora = new Date();
-    const diaSemanaActual = ahora.getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
-    const horaActual = ahora.getHours();
-    const minutoActual = ahora.getMinutes();
+    // Comparar en UTC (horarios guardados en UTC)
+    const diaSemanaActual = ahora.getUTCDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+    const horaActual = ahora.getUTCHours();
+    const minutoActual = ahora.getUTCMinutes();
     const horaActualStr = `${horaActual.toString().padStart(2, '0')}:${minutoActual.toString().padStart(2, '0')}`;
     
     // Mapear días de la semana: L=1, M=2, X=3, J=4, V=5, S=6, D=0

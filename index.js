@@ -1028,53 +1028,48 @@ const ejecutarHorarios = async () => {
       const horarios = horariosPorSerial[serial];
       const topic = horarios[0].topic;
       const topicIn = topic.concat('/in');
-      let debeActivar = false;
-      
-      // Verificar si algún horario está activo en este momento
+
+      // Enviar solo al inicio y al fin exactos
       for (const horario of horarios) {
         const diasSemana = horario.dias_semana.split(',');
         const horaInicio = horario.hora_inicio;
         const horaFin = horario.hora_fin;
-        
+
         // Verificar si el día actual está en los días programados
         const diaActualLetra = Object.keys(diaMap).find(key => diaMap[key] === diaSemanaActual);
         const diaCoincide = diasSemana.includes(diaActualLetra);
-        
         if (!diaCoincide) continue;
 
-        let estaDentroDelHorario = false;
-        if (horaInicio <= horaFin) {
-          // Rango normal dentro del mismo día
-          estaDentroDelHorario = horaActualStr >= horaInicio && horaActualStr < horaFin;
-        } else {
-          // Rango que cruza medianoche
-          estaDentroDelHorario = horaActualStr >= horaInicio || horaActualStr < horaFin;
+        if (horaActualStr === horaInicio) {
+          const messageInicio = JSON.stringify({
+            "bomba": "encendida",
+            "valvula": "cerrada"
+          });
+          console.log(`📤 [HORARIOS] Enviando a MQTT ${topicIn}: ${messageInicio}`);
+          mqttClient.publish(topicIn, messageInicio, { qos: 1, retain: false }, (err) => {
+            if (!err) {
+              console.log(`✅ [HORARIOS] Dispositivo ${serial} inicio horario (${horaInicio})`);
+            } else {
+              console.error(`❌ [HORARIOS] Error al enviar inicio de horario a ${serial}:`, err);
+            }
+          });
         }
-        // Si justo es la hora de fin, fuerza el estado de fin para asegurar envío puntual
+
         if (horaActualStr === horaFin) {
-          debeActivar = false;
-          break;
-        }
-        if (estaDentroDelHorario) {
-          debeActivar = true;
-          break;
+          const messageFin = JSON.stringify({
+            "bomba": "apagada",
+            "valvula": "abierta"
+          });
+          console.log(`📤 [HORARIOS] Enviando a MQTT ${topicIn}: ${messageFin}`);
+          mqttClient.publish(topicIn, messageFin, { qos: 1, retain: false }, (err) => {
+            if (!err) {
+              console.log(`✅ [HORARIOS] Dispositivo ${serial} fin horario (${horaFin})`);
+            } else {
+              console.error(`❌ [HORARIOS] Error al enviar fin de horario a ${serial}:`, err);
+            }
+          });
         }
       }
-
-      // Horarios: inicio -> encendida/cerrada, fin -> apagada/abierta
-      const estadoBomba = debeActivar ? "encendida" : "apagada";
-      const message = JSON.stringify({
-        "bomba": estadoBomba,
-        "valvula": estadoBomba === "encendida" ? "cerrada" : "abierta"
-      });
-      console.log(`📤 [HORARIOS] Enviando a MQTT ${topicIn}: ${message}`);
-      mqttClient.publish(topicIn, message, { qos: 1, retain: false }, (err) => {
-        if (!err) {
-          console.log(`✅ [HORARIOS] Dispositivo ${serial} ${debeActivar ? 'dentro' : 'fuera'} de horario (${horaActualStr})`);
-        } else {
-          console.error(`❌ [HORARIOS] Error al enviar estado de horario a ${serial}:`, err);
-        }
-      });
     }
   } catch (error) {
     console.error('❌ Error al ejecutar horarios:', error);

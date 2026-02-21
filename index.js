@@ -1061,11 +1061,11 @@ const ejecutarHorarios = async () => {
         }
       }
 
-      // El firmware responde invertido; enviamos el opuesto para obtener el estado deseado
+      // Horarios: inicio -> encendida/cerrada, fin -> apagada/abierta
       const estadoBomba = debeActivar ? "encendida" : "apagada";
       const message = JSON.stringify({
         "bomba": estadoBomba,
-        "valvula": estadoBomba === "apagada" ? "abierta" : "cerrada"
+        "valvula": estadoBomba === "encendida" ? "cerrada" : "abierta"
       });
       console.log(`📤 [HORARIOS] Enviando a MQTT ${topicIn}: ${message}`);
       mqttClient.publish(topicIn, message, { qos: 1, retain: false }, (err) => {

@@ -1032,8 +1032,8 @@ const ejecutarHorarios = async () => {
       // Enviar solo al inicio y al fin exactos
       for (const horario of horarios) {
         const diasSemana = horario.dias_semana.split(',');
-        const horaInicio = horario.hora_inicio;
-        const horaFin = horario.hora_fin;
+        const horaInicio = (horario.hora_inicio || '').toString().slice(0, 5);
+        const horaFin = (horario.hora_fin || '').toString().slice(0, 5);
 
         // Verificar si el día actual está en los días programados
         const diaActualLetra = Object.keys(diaMap).find(key => diaMap[key] === diaSemanaActual);

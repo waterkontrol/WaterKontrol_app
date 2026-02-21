@@ -1038,6 +1038,9 @@ const ejecutarHorarios = async () => {
         // Verificar si el día actual está en los días programados
         const diaActualLetra = Object.keys(diaMap).find(key => diaMap[key] === diaSemanaActual);
         const diaCoincide = diasSemana.includes(diaActualLetra);
+        console.log(
+          `🕒 [HORARIOS] Comparando serial=${serial} dia=${diaActualLetra} dias=${diasSemana.join(',')} horaActual=${horaActualStr} inicio=${horaInicio} fin=${horaFin} coincideDia=${diaCoincide}`
+        );
         if (!diaCoincide) continue;
 
         if (horaActualStr === horaInicio) {

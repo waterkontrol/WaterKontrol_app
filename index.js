@@ -1152,6 +1152,7 @@ const ejecutarHorarios = async () => {
 
 // Ejecutar horarios cada minuto
 let horariosInterval = null;
+let horariosTimeout = null;
 const iniciarEjecucionHorarios = () => {
   try {
     console.log('🔄 Iniciando sistema de ejecución de horarios...');
@@ -1159,18 +1160,28 @@ const iniciarEjecucionHorarios = () => {
     if (horariosInterval) {
       clearInterval(horariosInterval);
     }
+    if (horariosTimeout) {
+      clearTimeout(horariosTimeout);
+    }
     
     // Ejecutar inmediatamente al iniciar (sin await para no bloquear)
     ejecutarHorarios().catch(err => {
       console.error('❌ Error en ejecución inicial de horarios:', err);
     });
     
-    // Ejecutar cada minuto (60000 ms)
-    horariosInterval = setInterval(() => {
+    // Alinear ejecución al inicio del minuto para evitar desfases (ej. 20s)
+    const now = new Date();
+    const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+    horariosTimeout = setTimeout(() => {
       ejecutarHorarios().catch(err => {
-        console.error('❌ Error en ejecución periódica de horarios:', err);
+        console.error('❌ Error en ejecución periódica (alineada) de horarios:', err);
       });
-    }, 60000);
+      horariosInterval = setInterval(() => {
+        ejecutarHorarios().catch(err => {
+          console.error('❌ Error en ejecución periódica (alineada) de horarios:', err);
+        });
+      }, 60000);
+    }, Math.max(0, msToNextMinute));
     
     console.log('✅ Sistema de ejecución de horarios iniciado (verificación cada minuto)');
   } catch (error) {

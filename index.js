@@ -463,6 +463,30 @@ app.post('/api/dispositivo/refresh', async (req, res) => {
   
 });
 
+app.post('/api/dispositivo/modo', async (req, res) => {
+  const { topic, modo } = req.body || {};
+  if (!topic || !modo) {
+    return res.status(400).json({ message: 'Faltan datos (topic, modo).' });
+  }
+
+  const payload = {
+    modo_automatico: modo === 'automatico',
+    modo_ingreso: modo === 'ingreso',
+    modo_nivel: modo === 'nivel'
+  };
+
+  const message = JSON.stringify(payload);
+  mqttClient.publish(topic.concat('/in'), message, { qos: 0, retain: false }, (err) => {
+    if (!err) {
+      console.log(`✅ Modo enviado a MQTT ${topic.concat('/in')}: ${message}`);
+      res.status(201).json({ message: 'Modo enviado correctamente.' });
+    } else {
+      console.error(`❌ Error al publicar modo a ${topic.concat('/in')}:`, err);
+      res.status(400).json({ message: 'Error al publicar modo.' });
+    }
+  });
+});
+
 // GET /api/dispositivo/horarios/activo/:serial (Obtener estado activo de horarios)
 app.get('/api/dispositivo/horarios/activo/:serial', async (req, res) => {
   const { serial } = req.params;
@@ -1163,13 +1187,10 @@ const ejecutarHorarios = async () => {
         if (!diaCoincide) continue;
 
         if (horaActualStr === horaInicio) {
-          const tipo = horario.modo_ingreso === true
-            ? "ingreso"
-            : (horario.modo_nivel === true ? "nivel" : "automatico");
           const messageInicio = JSON.stringify({
             "bomba": "encendida",
             "valvula": "cerrada",
-            "tipo": tipo,
+            "tipo": "horario",
             "h_inicio": true,
             "h_fin": false
           });
@@ -1185,13 +1206,10 @@ const ejecutarHorarios = async () => {
         }
 
         if (horaActualStr === horaFin) {
-          const tipo = horario.modo_ingreso === true
-            ? "ingreso"
-            : (horario.modo_nivel === true ? "nivel" : "automatico");
           const messageFin = JSON.stringify({
             "bomba": "apagada",
             "valvula": "abierta",
-            "tipo": tipo,
+            "tipo": "horario",
             "h_inicio": false,
             "h_fin": true
           });

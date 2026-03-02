@@ -538,7 +538,7 @@ app.put('/api/dispositivo/horarios/activo/:serial', async (req, res) => {
 
 // POST /api/dispositivo/horarios (Guardar horario)
 app.post('/api/dispositivo/horarios', async (req, res) => {
-  let { horario_id, serial, dias_semana, hora_inicio, hora_fin, activo, tz_offset } = req.body;
+  let { horario_id, serial, dias_semana, hora_inicio, hora_fin, activo, tz_offset, mode } = req.body;
   
   if (!serial || !dias_semana || !hora_inicio || !hora_fin || activo === undefined) {
     return res.status(400).json({ 
@@ -583,6 +583,10 @@ app.post('/api/dispositivo/horarios', async (req, res) => {
   let client;
   try {
     client = await pool.connect();
+
+    const modoAutomatico = mode === 'automatico';
+    const modoIngreso = mode === 'ingreso';
+    const modoNivel = mode === 'nivel';
     
     // Si activo es false, NO hacer nada (no guardar, no eliminar)
     if (activo === false) {
@@ -599,6 +603,14 @@ app.post('/api/dispositivo/horarios', async (req, res) => {
          VALUES ($1, $2, $3, $4, $5) 
          RETURNING horario_id`,
         [serial, dias_semana, hora_inicio, hora_fin, activo]
+      );
+
+      // Actualizar modo en todos los horarios del serial
+      await client.query(
+        `UPDATE horarios 
+         SET modo_automatico = $1, modo_ingreso = $2, modo_nivel = $3
+         WHERE serial = $4`,
+        [modoAutomatico, modoIngreso, modoNivel, serial]
       );
       
       // Si se guarda un horario con activo = true, activar todos los horarios de este serial
@@ -619,9 +631,18 @@ app.post('/api/dispositivo/horarios', async (req, res) => {
       // Actualizar horario existente
       await client.query(
         `UPDATE horarios 
-         SET dias_semana = $1, hora_inicio = $2, hora_fin = $3, activo = $4 
-         WHERE horario_id = $5 AND serial = $6`,
-        [dias_semana, hora_inicio, hora_fin, activo, horario_id, serial]
+         SET dias_semana = $1, hora_inicio = $2, hora_fin = $3, activo = $4,
+             modo_automatico = $5, modo_ingreso = $6, modo_nivel = $7
+         WHERE horario_id = $8 AND serial = $9`,
+        [dias_semana, hora_inicio, hora_fin, activo, modoAutomatico, modoIngreso, modoNivel, horario_id, serial]
+      );
+
+      // Asegurar que todos los horarios del serial reflejen el modo seleccionado
+      await client.query(
+        `UPDATE horarios 
+         SET modo_automatico = $1, modo_ingreso = $2, modo_nivel = $3
+         WHERE serial = $4`,
+        [modoAutomatico, modoIngreso, modoNivel, serial]
       );
       
       console.log(`✅ Horario actualizado: horario_id ${horario_id} para serial: ${serial}`);
@@ -711,7 +732,7 @@ app.get('/api/dispositivo/horarios/activo-ahora/:serial', async (req, res) => {
 // PUT /api/dispositivo/horarios/:horario_id (Actualizar horario)
 app.put('/api/dispositivo/horarios/:horario_id', async (req, res) => {
   const { horario_id } = req.params;
-  let { dias_semana, hora_inicio, hora_fin, activo, tz_offset } = req.body;
+  let { dias_semana, hora_inicio, hora_fin, activo, tz_offset, mode } = req.body;
 
   if (!horario_id || !dias_semana || !hora_inicio || !hora_fin || activo === undefined) {
     return res.status(400).json({
@@ -756,13 +777,31 @@ app.put('/api/dispositivo/horarios/:horario_id', async (req, res) => {
   let client;
   try {
     client = await pool.connect();
+    const resultSerial = await client.query(
+      `SELECT serial FROM horarios WHERE horario_id = $1`,
+      [horario_id]
+    );
+    const serial = resultSerial.rows[0]?.serial;
+    const modoAutomatico = mode === 'automatico';
+    const modoIngreso = mode === 'ingreso';
+    const modoNivel = mode === 'nivel';
     const result = await client.query(
       `UPDATE horarios
-       SET dias_semana = $1, hora_inicio = $2, hora_fin = $3, activo = $4
-       WHERE horario_id = $5
+       SET dias_semana = $1, hora_inicio = $2, hora_fin = $3, activo = $4,
+           modo_automatico = $5, modo_ingreso = $6, modo_nivel = $7
+       WHERE horario_id = $8
        RETURNING horario_id`,
-      [dias_semana, hora_inicio, hora_fin, activo, horario_id]
+      [dias_semana, hora_inicio, hora_fin, activo, modoAutomatico, modoIngreso, modoNivel, horario_id]
     );
+
+    if (serial) {
+      await client.query(
+        `UPDATE horarios 
+         SET modo_automatico = $1, modo_ingreso = $2, modo_nivel = $3
+         WHERE serial = $4`,
+        [modoAutomatico, modoIngreso, modoNivel, serial]
+      );
+    }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Horario no encontrado.' });
@@ -963,6 +1002,7 @@ const procesarMensajesMqtt = () => {
       console.log(JSON.parse(message.toString().replace(/'/g, '"')));
       const messageJ = JSON.parse(message.toString().replace(/'/g, '"'));
 
+
       const result1 = await pool.query(`SELECT vlr_id, tipo, parametros.prt_id
         FROM registro_valor 
         JOIN parametros ON registro_valor.prt_id = parametros.prt_id
@@ -974,6 +1014,16 @@ const procesarMensajesMqtt = () => {
         const insertQueryVal = `
           UPDATE registro_valor SET valor = $3 WHERE rgt_id = $1 AND prt_id = $2;`;
         const resultVal = await dbClient.query(insertQueryVal, [rgt_id, row.prt_id, messageJ[row.tipo]]);
+      }
+
+      // Activar/Desactivar horarios según ingreso de agua (serial tomado del topic)
+      if (messageJ.ingreso === 'si' || messageJ.ingreso === 'no') {
+        const activo = messageJ.ingreso === 'no';
+        await dbClient.query(
+          `UPDATE horarios SET activo = $1 WHERE serial = $2`,
+          [activo, serie]
+        );
+        console.log(`🗓️ Horarios ${activo ? 'activados' : 'desactivados'} para serial ${serie} por ingreso=${messageJ.ingreso}`);
       }
 
       await dbClient.query('COMMIT');
@@ -1113,10 +1163,17 @@ const ejecutarHorarios = async () => {
         if (!diaCoincide) continue;
 
         if (horaActualStr === horaInicio) {
+          const tipo = horario.modo_ingreso === true
+            ? "ingreso"
+            : (horario.modo_nivel === true ? "nivel" : "automatico");
           const messageInicio = JSON.stringify({
             "bomba": "encendida",
-            "valvula": "cerrada"
+            "valvula": "cerrada",
+            "tipo": tipo,
+            "h_inicio": true,
+            "h_fin": false
           });
+          console.log(`📤 [HORARIOS] Enviando inicio ${serial} -> ${messageInicio}`);
           console.log(`📤 [HORARIOS] Enviando a MQTT ${topicIn}: ${messageInicio}`);
           mqttClient.publish(topicIn, messageInicio, { qos: 1, retain: false }, (err) => {
             if (!err) {
@@ -1128,10 +1185,17 @@ const ejecutarHorarios = async () => {
         }
 
         if (horaActualStr === horaFin) {
+          const tipo = horario.modo_ingreso === true
+            ? "ingreso"
+            : (horario.modo_nivel === true ? "nivel" : "automatico");
           const messageFin = JSON.stringify({
             "bomba": "apagada",
-            "valvula": "abierta"
+            "valvula": "abierta",
+            "tipo": tipo,
+            "h_inicio": false,
+            "h_fin": true
           });
+          console.log(`📤 [HORARIOS] Enviando fin ${serial} -> ${messageFin}`);
           console.log(`📤 [HORARIOS] Enviando a MQTT ${topicIn}: ${messageFin}`);
           mqttClient.publish(topicIn, messageFin, { qos: 1, retain: false }, (err) => {
             if (!err) {

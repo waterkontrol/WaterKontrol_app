@@ -9,6 +9,7 @@ const path = require('path');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const cookieParser = require('cookie-parser');
 const saltRounds = 10;
 var cors = require('cors');
@@ -169,6 +170,60 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+const resend = new Resend(process.env.RESEND_API_KEY || '');
+
+let usuarioColumnsCache = null;
+const loadUsuarioColumns = async () => {
+  if (usuarioColumnsCache) return usuarioColumnsCache;
+  const result = await pool.query(
+    `SELECT column_name, data_type
+     FROM information_schema.columns
+     WHERE table_name = 'usuario' AND column_name IN ('token_verificacion', 'estatus')`
+  );
+  const columns = new Map(result.rows.map(r => [r.column_name, r.data_type]));
+  usuarioColumnsCache = {
+    hasTokenVerificacion: columns.has('token_verificacion'),
+    hasEstatus: columns.has('estatus'),
+    estatusType: columns.get('estatus') || null
+  };
+  return usuarioColumnsCache;
+};
+
+const getEstatusPendienteValue = (estatusType) => {
+  if (!estatusType) return 'PENDIENTE';
+  const numericTypes = new Set(['smallint', 'integer', 'bigint', 'numeric']);
+  return numericTypes.has(estatusType) ? 0 : 'PENDIENTE';
+};
+
+const getEstatusActivoValue = (estatusType) => {
+  if (!estatusType) return 'ACTIVO';
+  const numericTypes = new Set(['smallint', 'integer', 'bigint', 'numeric']);
+  return numericTypes.has(estatusType) ? 1 : 'ACTIVO';
+};
+
+const isEstatusActivo = (value, estatusType) => {
+  if (!estatusType) return value === 'ACTIVO';
+  const numericTypes = new Set(['smallint', 'integer', 'bigint', 'numeric']);
+  return numericTypes.has(estatusType) ? Number(value) === 1 : value === 'ACTIVO';
+};
+
+const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+const sendVerificationCodeEmail = async (correo, code) => {
+  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM) {
+    throw new Error('RESEND_API_KEY o RESEND_FROM no configurado.');
+  }
+  await resend.emails.send({
+    from: process.env.RESEND_FROM,
+    to: correo,
+    subject: 'Código de verificación - WaterKontrol',
+    text: `Tu código de verificación es: ${code}`,
+    html: `<p>Tu código de verificación es:</p><p><strong>${code}</strong></p>`
+  });
+};
+
 // ===================================================================================
 // RUTAS DE AUTENTICACIÓN
 // ===================================================================================
@@ -182,11 +237,24 @@ app.post('/auth/register', async (req, res) => {
 
   try {
     const hashed = await bcrypt.hash(clave, saltRounds);
-    const result = await pool.query(
-      'INSERT INTO usuario (nombre, correo, clave) VALUES ($1, $2, $3) RETURNING usr_id',
-      [nombre, correo, hashed]
-    );
-    res.status(201).json({ message: 'Usuario registrado exitosamente.' });
+    const columns = await loadUsuarioColumns();
+    const verificationCode = generateVerificationCode();
+
+    if (columns.hasTokenVerificacion && columns.hasEstatus) {
+      const estatusPendiente = getEstatusPendienteValue(columns.estatusType);
+      await pool.query(
+        'INSERT INTO usuario (nombre, correo, clave, token_verificacion, estatus) VALUES ($1, $2, $3, $4, $5) RETURNING usr_id',
+        [nombre, correo, hashed, verificationCode, estatusPendiente]
+      );
+    } else {
+      await pool.query(
+        'INSERT INTO usuario (nombre, correo, clave) VALUES ($1, $2, $3) RETURNING usr_id',
+        [nombre, correo, hashed]
+      );
+    }
+
+    await sendVerificationCodeEmail(correo, verificationCode);
+    res.status(201).json({ message: 'Usuario registrado. Código de verificación enviado.' });
   } catch (error) {
     if (error.code === '23505') {
       return res.status(409).json({ message: 'El correo ya está registrado.' });
@@ -204,12 +272,17 @@ app.post('/auth/login', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT usr_id, clave FROM usuario WHERE correo = $1', [correo]);
+    const columns = await loadUsuarioColumns();
+    const selectFields = columns.hasEstatus ? 'usr_id, clave, estatus' : 'usr_id, clave';
+    const result = await pool.query(`SELECT ${selectFields} FROM usuario WHERE correo = $1`, [correo]);
     if (result.rows.length === 0) {
       return res.status(401).json({ message: 'Credenciales incorrectas.' });
     }
 
     const user = result.rows[0];
+    if (columns.hasEstatus && user.estatus && !isEstatusActivo(user.estatus, columns.estatusType)) {
+      return res.status(403).json({ message: 'Cuenta pendiente de verificación.' });
+    }
     const match = await bcrypt.compare(clave, user.clave);
     if (!match) {
       return res.status(401).json({ message: 'Credenciales incorrectas.' });
@@ -242,6 +315,74 @@ app.post('/auth/logout', isAuth, async (req, res) => {
   await pool.query('DELETE FROM sesion WHERE token = $1', [token]);
   res.clearCookie('session_token');
   res.status(200).json({ message: 'Sesión cerrada.' });
+});
+
+// POST /auth/verify-code
+app.post('/auth/verify-code', async (req, res) => {
+  const { correo, codigo } = req.body;
+  if (!correo || !codigo) {
+    return res.status(400).json({ message: 'Faltan datos.' });
+  }
+
+  try {
+    const columns = await loadUsuarioColumns();
+    if (!columns.hasTokenVerificacion || !columns.hasEstatus) {
+      return res.status(400).json({ message: 'Verificación no disponible en esta base de datos.' });
+    }
+
+    const estatusActivo = getEstatusActivoValue(columns.estatusType);
+    const result = await pool.query(
+      'UPDATE usuario SET estatus = $1, token_verificacion = NULL WHERE correo = $2 AND token_verificacion = $3 RETURNING usr_id',
+      [estatusActivo, correo, codigo]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ message: 'Código inválido o ya usado.' });
+    }
+
+    return res.status(200).json({ message: 'Cuenta verificada correctamente.' });
+  } catch (error) {
+    console.error('Error al verificar código:', error);
+    return res.status(500).json({ message: 'Error interno al verificar código.' });
+  }
+});
+
+// POST /auth/resend-code
+app.post('/auth/resend-code', async (req, res) => {
+  const { correo } = req.body;
+  if (!correo) {
+    return res.status(400).json({ message: 'Falta el correo.' });
+  }
+
+  try {
+    const columns = await loadUsuarioColumns();
+    if (!columns.hasTokenVerificacion || !columns.hasEstatus) {
+      return res.status(400).json({ message: 'Reenvío no disponible en esta base de datos.' });
+    }
+
+    const user = await pool.query(
+      'SELECT usr_id, estatus FROM usuario WHERE correo = $1',
+      [correo]
+    );
+    if (user.rows.length === 0) {
+      return res.status(200).json({ message: 'Si el correo existe, se enviará el código.' });
+    }
+    if (isEstatusActivo(user.rows[0].estatus, columns.estatusType)) {
+      return res.status(400).json({ message: 'La cuenta ya está verificada.' });
+    }
+
+    const verificationCode = generateVerificationCode();
+    await pool.query(
+      'UPDATE usuario SET token_verificacion = $1 WHERE correo = $2',
+      [verificationCode, correo]
+    );
+    await sendVerificationCodeEmail(correo, verificationCode);
+
+    return res.status(200).json({ message: 'Código reenviado.' });
+  } catch (error) {
+    console.error('Error al reenviar código:', error);
+    return res.status(500).json({ message: 'Error interno al reenviar código.' });
+  }
 });
 
 // POST /auth/forgot

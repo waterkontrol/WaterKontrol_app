@@ -171,6 +171,33 @@ const transporter = nodemailer.createTransport({
 });
 
 const resend = new Resend(process.env.RESEND_API_KEY || '');
+const EMAIL_FROM = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'no-reply@waterkontrol.app';
+const RESEND_FROM = process.env.RESEND_FROM || EMAIL_FROM;
+
+const sendPasswordResetEmail = async (correo, resetLink) => {
+  const subject = 'Restablece tu contraseña - WaterKontrol';
+  const html = `<p>Haz clic en el siguiente enlace para restablecer tu contraseña:</p><a href="${resetLink}">${resetLink}</a>`;
+
+  if (process.env.RESEND_API_KEY) {
+    return resend.emails.send({
+      from: RESEND_FROM,
+      to: correo,
+      subject,
+      html
+    });
+  }
+
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    throw new Error('Email credentials not configured');
+  }
+
+  return transporter.sendMail({
+    from: EMAIL_FROM,
+    to: correo,
+    subject,
+    html
+  });
+};
 
 let usuarioColumnsCache = null;
 const loadUsuarioColumns = async () => {
@@ -216,9 +243,9 @@ const sendVerificationCodeEmail = async (correo, code) => {
     throw new Error('RESEND_API_KEY o RESEND_FROM no configurado.');
   }
   await resend.emails.send({
-    from: process.env.RESEND_FROM,
+    from: RESEND_FROM,
     to: correo,
-    subject: 'Código de verificación - WaterKontrol',
+    subject: 'Código de verificación - Kontrol',
     text: `Tu código de verificación es: ${code}`,
     html: `<p>Tu código de verificación es:</p><p><strong>${code}</strong></p>`
   });
@@ -391,22 +418,17 @@ app.post('/auth/forgot', async (req, res) => {
   if (!correo) return res.status(400).json({ message: 'Falta el correo.' });
 
   try {
-    const user = await pool.query('SELECT usuario_id FROM usuario WHERE correo = $1', [correo]);
+    const user = await pool.query('SELECT usr_id FROM usuario WHERE correo = $1', [correo]);
     if (user.rows.length === 0) return res.status(200).json({ message: 'Si el correo existe, se enviará el enlace.' });
 
     const token = crypto.randomBytes(32).toString('hex');
     await pool.query(
-      'INSERT INTO reset_tokens (token, usuario_id, expira_en) VALUES ($1, $2, NOW() + INTERVAL \'1 hour\')',
-      [token, user.rows[0].usuario_id]
+      'INSERT INTO reset_tokens (token, usr_id, expira_en) VALUES ($1, $2, NOW() + INTERVAL \'1 hour\')',
+      [token, user.rows[0].usr_id]
     );
 
     const resetLink = `${RAILWAY_API_URL}/reset.html?token=${token}`;
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: correo,
-      subject: 'Restablece tu contraseña - WaterKontrol',
-      html: `<p>Haz clic en el siguiente enlace para restablecer tu contraseña:</p><a href="${resetLink}">${resetLink}</a>`
-    });
+    await sendPasswordResetEmail(correo, resetLink);
 
     res.status(200).json({ message: 'Si el correo existe, se enviará el enlace.' });
   } catch (err) {
@@ -422,14 +444,14 @@ app.post('/auth/reset', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'SELECT usuario_id FROM reset_tokens WHERE token = $1 AND expira_en > NOW()',
+      'SELECT usr_id FROM reset_tokens WHERE token = $1 AND expira_en > NOW()',
       [token]
     );
     if (result.rows.length === 0) return res.status(400).json({ message: 'Token inválido o expirado.' });
 
-    const usuarioId = result.rows[0].usuario_id;
+    const usuarioId = result.rows[0].usr_id;
     const hashed = await bcrypt.hash(nuevaClave, saltRounds);
-    await pool.query('UPDATE usuario SET clave = $1 WHERE usuario_id = $2', [hashed, usuarioId]);
+    await pool.query('UPDATE usuario SET clave = $1 WHERE usr_id = $2', [hashed, usuarioId]);
     await pool.query('DELETE FROM reset_tokens WHERE token = $1', [token]);
 
     res.status(200).json({ message: 'Contraseña restablecida exitosamente.' });
@@ -454,6 +476,33 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
   } catch (err) {
     console.error('Error al obtener dispositivos:', err);
     res.status(500).json({ message: 'Error al obtener la lista de dispositivos.' });
+  }
+});
+
+// PUT /api/dispositivo/nombre (Actualizar nombre del dispositivo)
+app.put('/api/dispositivo/nombre', isAuth, async (req, res) => {
+  const { serial, nombre } = req.body || {};
+
+  if (!serial || !nombre) {
+    return res.status(400).json({ message: 'Serial y nombre son requeridos.' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE registro
+       SET nombre_registrado = $1
+       WHERE serial = $2 AND usr_id = $3`,
+      [nombre, serial, req.userId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Dispositivo no encontrado.' });
+    }
+
+    return res.status(200).json({ message: 'Nombre actualizado exitosamente.' });
+  } catch (err) {
+    console.error('Error al actualizar nombre del dispositivo:', err);
+    return res.status(500).json({ message: 'Error al actualizar el nombre del dispositivo.' });
   }
 });
 

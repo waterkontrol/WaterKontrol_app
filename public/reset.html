@@ -22,6 +22,25 @@
   </div>
 
   <script>
+    const appLoginUrl = 'com.waterkontrol.app://login';
+    const webLoginUrl = '/login.html';
+
+    function isNativeApp() {
+      return Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+    }
+
+    function redirectToAppLogin() {
+      if (isNativeApp()) {
+        window.location.href = webLoginUrl;
+        return;
+      }
+
+      window.location.href = appLoginUrl;
+      setTimeout(() => {
+        window.location.href = webLoginUrl;
+      }, 1800);
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
 
@@ -51,7 +70,7 @@
         message.style.color = res.ok ? 'green' : 'red';
 
         if (res.ok) {
-          setTimeout(() => window.location.href = '/login.html', 2000);
+          setTimeout(() => redirectToAppLogin(), 1200);
         }
       } catch (err) {
         message.textContent = 'Error de red';

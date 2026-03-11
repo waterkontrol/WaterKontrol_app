@@ -173,10 +173,15 @@ const transporter = nodemailer.createTransport({
 const resend = new Resend(process.env.RESEND_API_KEY || '');
 const EMAIL_FROM = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'no-reply@waterkontrol.app';
 const RESEND_FROM = process.env.RESEND_FROM || EMAIL_FROM;
+const APP_URL_SCHEME = process.env.APP_URL_SCHEME || 'io.ionic.starter';
 
-const sendPasswordResetEmail = async (correo, resetLink) => {
+const sendPasswordResetEmail = async (correo, resetLink, fallbackLink = null) => {
   const subject = 'Restablece tu contraseña - WaterKontrol';
-  const html = `<p>Haz clic en el siguiente enlace para restablecer tu contraseña:</p><a href="${resetLink}">${resetLink}</a>`;
+  const html = `
+    <p>Haz clic en el siguiente enlace para restablecer tu contraseña en la app:</p>
+    <p><a href="${resetLink}">Abrir WaterKontrol</a></p>
+    ${fallbackLink ? `<p>Si tu dispositivo no abre la app, usa este enlace alternativo:</p><p><a href="${fallbackLink}">${fallbackLink}</a></p>` : ''}
+  `;
 
   if (process.env.RESEND_API_KEY) {
     return resend.emails.send({
@@ -427,8 +432,9 @@ app.post('/auth/forgot', async (req, res) => {
       [token, user.rows[0].usr_id]
     );
 
-    const resetLink = `${RAILWAY_API_URL}/reset.html?token=${token}`;
-    await sendPasswordResetEmail(correo, resetLink);
+    const appResetLink = `${APP_URL_SCHEME}://reset?token=${token}`;
+    const webResetLink = `${RAILWAY_API_URL}/reset.html?token=${token}`;
+    await sendPasswordResetEmail(correo, appResetLink, webResetLink);
 
     res.status(200).json({ message: 'Si el correo existe, se enviará el enlace.' });
   } catch (err) {

@@ -176,10 +176,10 @@ const RESEND_FROM = process.env.RESEND_FROM || EMAIL_FROM;
 const APP_URL_SCHEME = process.env.APP_URL_SCHEME || 'io.ionic.starter';
 
 const sendPasswordResetEmail = async (correo, resetLink, fallbackLink = null) => {
-  const subject = 'Restablece tu contraseña - WaterKontrol';
+  const subject = 'Restablece tu contraseña - Kontrol';
   const html = `
     <p>Haz clic en el siguiente enlace para restablecer tu contraseña en la app:</p>
-    <p><a href="${resetLink}">Abrir WaterKontrol</a></p>
+    <p><a href="${resetLink}">Abrir Kontrol</a></p>
     ${fallbackLink ? `<p>Si tu dispositivo no abre la app, usa este enlace alternativo:</p><p><a href="${fallbackLink}">${fallbackLink}</a></p>` : ''}
   `;
 

@@ -16,29 +16,24 @@
       <button type="submit">Restablecer Contraseña</button>
       <p id="message" style="margin-top: 15px;"></p>
     </form>
-    <div class="links">
+    <div id="successState" class="links" style="display: none; text-align: center;">
+      <p style="margin-bottom: 12px;">Ya puedes abrir tu aplicación e iniciar sesión.</p>
+      <button id="openAppButton" type="button" style="margin-bottom: 12px;">Abrir Kontrol</button>
+    </div>
+    <div id="defaultLinks" class="links">
       <a href="/login.html">Volver al Login</a>
     </div>
   </div>
 
   <script>
-    const appLoginUrl = 'com.waterkontrol.app://login';
-    const webLoginUrl = '/login.html';
+    const appLoginUrl = 'io.ionic.starter://login';
+    const successState = document.getElementById('successState');
+    const defaultLinks = document.getElementById('defaultLinks');
+    const resetForm = document.getElementById('resetForm');
+    const openAppButton = document.getElementById('openAppButton');
 
-    function isNativeApp() {
-      return Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
-    }
-
-    function redirectToAppLogin() {
-      if (isNativeApp()) {
-        window.location.href = webLoginUrl;
-        return;
-      }
-
+    function openApp() {
       window.location.href = appLoginUrl;
-      setTimeout(() => {
-        window.location.href = webLoginUrl;
-      }, 1800);
     }
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -47,10 +42,12 @@
     if (!token) {
       document.getElementById('message').textContent = 'Token inválido o faltante.';
       document.getElementById('message').style.color = 'red';
-      document.getElementById('resetForm').style.display = 'none';
+      resetForm.style.display = 'none';
     }
 
-    document.getElementById('resetForm').addEventListener('submit', async function (e) {
+    openAppButton.addEventListener('click', openApp);
+
+    resetForm.addEventListener('submit', async function (e) {
       e.preventDefault();
       const message = document.getElementById('message');
       message.textContent = 'Restableciendo...';
@@ -70,7 +67,9 @@
         message.style.color = res.ok ? 'green' : 'red';
 
         if (res.ok) {
-          setTimeout(() => redirectToAppLogin(), 1200);
+          resetForm.style.display = 'none';
+          defaultLinks.style.display = 'none';
+          successState.style.display = 'block';
         }
       } catch (err) {
         message.textContent = 'Error de red';

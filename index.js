@@ -210,13 +210,14 @@ const loadUsuarioColumns = async () => {
   const result = await pool.query(
     `SELECT column_name, data_type
      FROM information_schema.columns
-     WHERE table_name = 'usuario' AND column_name IN ('token_verificacion', 'estatus')`
+     WHERE table_name = 'usuario' AND column_name IN ('token_verificacion', 'estatus', 'role')`
   );
   const columns = new Map(result.rows.map(r => [r.column_name, r.data_type]));
   usuarioColumnsCache = {
     hasTokenVerificacion: columns.has('token_verificacion'),
     hasEstatus: columns.has('estatus'),
-    estatusType: columns.get('estatus') || null
+    estatusType: columns.get('estatus') || null,
+    hasRole: columns.has('role')
   };
   return usuarioColumnsCache;
 };
@@ -305,7 +306,8 @@ app.post('/auth/login', async (req, res) => {
 
   try {
     const columns = await loadUsuarioColumns();
-    const selectFields = columns.hasEstatus ? 'usr_id, clave, estatus' : 'usr_id, clave';
+    let selectFields = columns.hasEstatus ? 'usr_id, clave, estatus' : 'usr_id, clave';
+    if (columns.hasRole) selectFields += ', role';
     const result = await pool.query(`SELECT ${selectFields} FROM usuario WHERE correo = $1`, [correo]);
     if (result.rows.length === 0) {
       return res.status(401).json({ message: 'Credenciales incorrectas.' });
@@ -333,7 +335,9 @@ app.post('/auth/login', async (req, res) => {
     //   'session_token='+token+'; SameSite=None; Secure; HttpOnly; Max-Age=3600'
     // ]);
 
-    res.status(200).json({ message: 'Inicio de sesión exitoso.', token: token, usr_id: user.usr_id });
+    const loginResponse = { message: 'Inicio de sesión exitoso.', token: token, usr_id: user.usr_id };
+    if (columns.hasRole) loginResponse.role = user.role || 'user';
+    res.status(200).json(loginResponse);
     // res.send({ message: 'Inicio de sesión exitoso.', token: token });
   } catch (error) {
     console.error('Error al iniciar sesión:', error);

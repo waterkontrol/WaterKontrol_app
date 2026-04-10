@@ -156,6 +156,19 @@ const isAuth = (req, res, next) => {
 
 };
 
+const isAdmin = async (req, res, next) => {
+  try {
+    const result = await pool.query('SELECT role FROM usuario WHERE usr_id = $1', [req.userId]);
+    if (result.rows.length === 0 || result.rows[0].role !== 'admin') {
+      return res.status(403).json({ message: 'Acceso denegado. Se requiere rol de administrador.' });
+    }
+    next();
+  } catch (err) {
+    console.error('Error al verificar rol:', err);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+};
+
 // ===================================================================================
 // CONFIGURACIÓN DE NODEMAILER
 // ===================================================================================
@@ -485,6 +498,17 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error('Error al obtener dispositivos:', err);
+    res.status(500).json({ message: 'Error al obtener la lista de dispositivos.' });
+  }
+});
+
+// GET /api/admin/dispositivos (Listar todos los dispositivos - solo admin)
+app.get('/api/admin/dispositivos', isAuth, isAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM dispositivo ORDER BY fecha_creacion DESC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al obtener dispositivos (admin):', err);
     res.status(500).json({ message: 'Error al obtener la lista de dispositivos.' });
   }
 });

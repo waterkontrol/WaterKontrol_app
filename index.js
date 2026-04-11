@@ -589,6 +589,21 @@ app.delete('/api/admin/series-types/:id', isAuth, isAdmin, async (req, res) => {
   }
 });
 
+// GET /api/series-type/:numero (Obtener variables de un series type por número)
+app.get('/api/series-type/:numero', isAuth, async (req, res) => {
+  const { numero } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM series_type WHERE numero = $1', [numero]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Series type no encontrado.', variables: [] });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error al obtener series type:', err);
+    res.status(500).json({ message: 'Error al obtener series type.' });
+  }
+});
+
 // PUT /api/dispositivo/nombre (Actualizar nombre del dispositivo)
 app.put('/api/dispositivo/nombre', isAuth, async (req, res) => {
   const { serial, nombre } = req.body || {};

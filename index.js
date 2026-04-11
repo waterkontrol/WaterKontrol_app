@@ -513,6 +513,82 @@ app.get('/api/admin/dispositivos', isAuth, isAdmin, async (req, res) => {
   }
 });
 
+// ===================================================================================
+// RUTAS ADMIN - SERIES TYPES
+// ===================================================================================
+
+// GET /api/admin/series-types (Listar todos los series types)
+app.get('/api/admin/series-types', isAuth, isAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM series_type ORDER BY numero ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al obtener series types:', err);
+    res.status(500).json({ message: 'Error al obtener series types.' });
+  }
+});
+
+// POST /api/admin/series-types (Crear un series type)
+app.post('/api/admin/series-types', isAuth, isAdmin, async (req, res) => {
+  const { numero, variables } = req.body;
+  if (numero == null || !Array.isArray(variables)) {
+    return res.status(400).json({ message: 'Se requiere numero y variables.' });
+  }
+  try {
+    const result = await pool.query(
+      'INSERT INTO series_type (numero, variables) VALUES ($1, $2) RETURNING *',
+      [numero, JSON.stringify(variables)]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'Ya existe un series type con ese número.' });
+    }
+    console.error('Error al crear series type:', err);
+    res.status(500).json({ message: 'Error al crear series type.' });
+  }
+});
+
+// PUT /api/admin/series-types/:id (Actualizar un series type)
+app.put('/api/admin/series-types/:id', isAuth, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { numero, variables } = req.body;
+  if (numero == null || !Array.isArray(variables)) {
+    return res.status(400).json({ message: 'Se requiere numero y variables.' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE series_type SET numero = $1, variables = $2 WHERE st_id = $3 RETURNING *',
+      [numero, JSON.stringify(variables), id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Series type no encontrado.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'Ya existe un series type con ese número.' });
+    }
+    console.error('Error al actualizar series type:', err);
+    res.status(500).json({ message: 'Error al actualizar series type.' });
+  }
+});
+
+// DELETE /api/admin/series-types/:id (Eliminar un series type)
+app.delete('/api/admin/series-types/:id', isAuth, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM series_type WHERE st_id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Series type no encontrado.' });
+    }
+    res.json({ message: 'Series type eliminado.' });
+  } catch (err) {
+    console.error('Error al eliminar series type:', err);
+    res.status(500).json({ message: 'Error al eliminar series type.' });
+  }
+});
+
 // PUT /api/dispositivo/nombre (Actualizar nombre del dispositivo)
 app.put('/api/dispositivo/nombre', isAuth, async (req, res) => {
   const { serial, nombre } = req.body || {};
@@ -1543,6 +1619,14 @@ const initializeApplicationServices = async () => {
       console.error('❌ No se pudo conectar a la base de datos. Las funciones de autenticación y DB fallarán.');
     } else {
       try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS series_type (
+            st_id SERIAL PRIMARY KEY,
+            numero INTEGER UNIQUE NOT NULL,
+            variables JSONB DEFAULT '[]'
+          )
+        `);
+        console.log('✅ Tabla series_type verificada/creada');
         console.log('🔄 [DEBUG] Iniciando procesarMensajesMqtt...');
         procesarMensajesMqtt();
         console.log('🔄 [DEBUG] Llamando a iniciarEjecucionHorarios...');

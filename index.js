@@ -502,6 +502,49 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
   }
 });
 
+// ===================================================================================
+// RUTAS ADMIN - USUARIOS
+// ===================================================================================
+
+// GET /api/admin/usuarios (Listar todos los usuarios)
+app.get('/api/admin/usuarios', isAuth, isAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT usr_id, nombre, correo, estatus, role, pago, pago_expira
+       FROM usuario ORDER BY usr_id ASC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al obtener usuarios:', err);
+    res.status(500).json({ message: 'Error al obtener la lista de usuarios.' });
+  }
+});
+
+// PUT /api/admin/usuarios/:id/pago (Actualizar estado de pago)
+app.put('/api/admin/usuarios/:id/pago', isAuth, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { pago } = req.body;
+  const estadosValidos = ['pago', 'por_vencer', 'no_pago'];
+  if (!estadosValidos.includes(pago)) {
+    return res.status(400).json({ message: 'Estado de pago inválido.' });
+  }
+  try {
+    const pagoExpira = pago === 'pago' ? "NOW() + INTERVAL '1 month'" : 'NULL';
+    const result = await pool.query(
+      `UPDATE usuario SET pago = $1, pago_expira = ${pagoExpira} WHERE usr_id = $2
+       RETURNING usr_id, nombre, correo, estatus, role, pago, pago_expira`,
+      [pago, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error al actualizar pago:', err);
+    res.status(500).json({ message: 'Error al actualizar estado de pago.' });
+  }
+});
+
 // GET /api/admin/dispositivos (Listar todos los dispositivos - solo admin)
 app.get('/api/admin/dispositivos', isAuth, isAdmin, async (req, res) => {
   try {
@@ -1642,6 +1685,10 @@ const initializeApplicationServices = async () => {
           )
         `);
         console.log('✅ Tabla series_type verificada/creada');
+        await pool.query(`
+          ALTER TABLE usuario ADD COLUMN IF NOT EXISTS pago_expira TIMESTAMPTZ
+        `);
+        console.log('✅ Columna pago_expira verificada/creada');
         console.log('🔄 [DEBUG] Iniciando procesarMensajesMqtt...');
         procesarMensajesMqtt();
         console.log('🔄 [DEBUG] Llamando a iniciarEjecucionHorarios...');

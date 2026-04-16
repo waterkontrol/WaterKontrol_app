@@ -764,6 +764,20 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     return res.status(400).json({ message: 'Datos incompletos.' });
   }
 
+  // Verificar que el serial exista en la tabla seriales
+  try {
+    const serialCheck = await pool.query(
+      'SELECT srl_id FROM seriales WHERE serial = $1',
+      [serial.trim().toUpperCase()]
+    );
+    if (serialCheck.rows.length === 0) {
+      return res.status(404).json({ message: `El serial ${serial} no existe. Contacte al administrador.` });
+    }
+  } catch (err) {
+    console.error('Error al verificar serial:', err);
+    return res.status(500).json({ message: 'Error al verificar el serial.' });
+  }
+
   let client;
   try {
     client = await pool.connect();

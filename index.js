@@ -550,14 +550,6 @@ app.post('/api/admin/seriales', isAuth, isAdmin, async (req, res) => {
 app.delete('/api/admin/seriales/:id', isAuth, isAdmin, async (req, res) => {
   const { id } = req.params;
   try {
-    // No permitir eliminar si está en uso
-    const check = await pool.query(
-      'SELECT r.serial FROM seriales s JOIN registro r ON r.serial = s.serial WHERE s.srl_id = $1',
-      [id]
-    );
-    if (check.rows.length > 0) {
-      return res.status(409).json({ message: 'No se puede eliminar un serial que está en uso.' });
-    }
     const result = await pool.query('DELETE FROM seriales WHERE srl_id = $1 RETURNING *', [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Serial no encontrado.' });
@@ -642,6 +634,32 @@ app.post('/api/admin/dispositivos', isAuth, isAdmin, async (req, res) => {
     }
     console.error('Error al crear dispositivo:', err);
     res.status(500).json({ message: 'Error al crear dispositivo.' });
+  }
+});
+
+// PUT /api/admin/dispositivos/:id (Editar modelo de dispositivo)
+app.put('/api/admin/dispositivos/:id', isAuth, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { modelo, abreviatura, seriestype, marca } = req.body;
+  if (!modelo || !abreviatura || !seriestype) {
+    return res.status(400).json({ message: 'Se requiere modelo, abreviatura y seriestype.' });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE dispositivo SET modelo = $1, abreviatura = $2, seriestype = $3, marca = $4
+       WHERE dsp_id = $5 RETURNING *`,
+      [modelo.trim().toUpperCase(), abreviatura.trim().toUpperCase(), seriestype, marca?.trim() || null, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Dispositivo no encontrado.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'Ya existe un dispositivo con ese modelo o abreviatura.' });
+    }
+    console.error('Error al editar dispositivo:', err);
+    res.status(500).json({ message: 'Error al editar dispositivo.' });
   }
 });
 

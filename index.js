@@ -503,6 +503,73 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
 });
 
 // ===================================================================================
+// RUTAS ADMIN - SERIALES
+// ===================================================================================
+
+// GET /api/admin/seriales (Listar todos los seriales con estado de uso)
+app.get('/api/admin/seriales', isAuth, isAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT s.srl_id, s.serial, s.seriestype, s.fecha_creacion,
+             CASE WHEN r.serial IS NOT NULL THEN true ELSE false END AS usado,
+             r.nombre_registrado, u.nombre AS usuario_nombre, u.correo AS usuario_correo
+      FROM seriales s
+      LEFT JOIN registro r ON r.serial = s.serial
+      LEFT JOIN usuario u ON u.usr_id = r.usr_id
+      ORDER BY s.fecha_creacion DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al obtener seriales:', err);
+    res.status(500).json({ message: 'Error al obtener seriales.' });
+  }
+});
+
+// POST /api/admin/seriales (Crear un serial)
+app.post('/api/admin/seriales', isAuth, isAdmin, async (req, res) => {
+  const { serial, seriestype } = req.body;
+  if (!serial || !seriestype) {
+    return res.status(400).json({ message: 'Se requiere serial y seriestype.' });
+  }
+  try {
+    const result = await pool.query(
+      'INSERT INTO seriales (serial, seriestype) VALUES ($1, $2) RETURNING *',
+      [serial.trim().toUpperCase(), seriestype]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'Ya existe un serial con ese código.' });
+    }
+    console.error('Error al crear serial:', err);
+    res.status(500).json({ message: 'Error al crear serial.' });
+  }
+});
+
+// DELETE /api/admin/seriales/:id (Eliminar un serial)
+app.delete('/api/admin/seriales/:id', isAuth, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    // No permitir eliminar si está en uso
+    const check = await pool.query(
+      'SELECT r.serial FROM seriales s JOIN registro r ON r.serial = s.serial WHERE s.srl_id = $1',
+      [id]
+    );
+    if (check.rows.length > 0) {
+      return res.status(409).json({ message: 'No se puede eliminar un serial que está en uso.' });
+    }
+    const result = await pool.query('DELETE FROM seriales WHERE srl_id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Serial no encontrado.' });
+    }
+    res.json({ message: 'Serial eliminado.' });
+  } catch (err) {
+    console.error('Error al eliminar serial:', err);
+    res.status(500).json({ message: 'Error al eliminar serial.' });
+  }
+});
+
+// ===================================================================================
 // RUTAS ADMIN - USUARIOS
 // ===================================================================================
 
@@ -1689,6 +1756,15 @@ const initializeApplicationServices = async () => {
           ALTER TABLE usuario ADD COLUMN IF NOT EXISTS pago_expira TIMESTAMPTZ
         `);
         console.log('✅ Columna pago_expira verificada/creada');
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS seriales (
+            srl_id SERIAL PRIMARY KEY,
+            serial VARCHAR UNIQUE NOT NULL,
+            seriestype INTEGER NOT NULL,
+            fecha_creacion TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+        console.log('✅ Tabla seriales verificada/creada');
         console.log('🔄 [DEBUG] Iniciando procesarMensajesMqtt...');
         procesarMensajesMqtt();
         console.log('🔄 [DEBUG] Llamando a iniciarEjecucionHorarios...');

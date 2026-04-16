@@ -623,6 +623,47 @@ app.get('/api/admin/dispositivos', isAuth, isAdmin, async (req, res) => {
   }
 });
 
+// POST /api/admin/dispositivos (Crear modelo de dispositivo)
+app.post('/api/admin/dispositivos', isAuth, isAdmin, async (req, res) => {
+  const { modelo, abreviatura, seriestype, marca } = req.body;
+  if (!modelo || !abreviatura || !seriestype) {
+    return res.status(400).json({ message: 'Se requiere modelo, abreviatura y seriestype.' });
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO dispositivo (modelo, abreviatura, seriestype, marca, estatus)
+       VALUES ($1, $2, $3, $4, 'A') RETURNING *`,
+      [modelo.trim().toUpperCase(), abreviatura.trim().toUpperCase(), seriestype, marca?.trim() || null]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'Ya existe un dispositivo con ese modelo o abreviatura.' });
+    }
+    console.error('Error al crear dispositivo:', err);
+    res.status(500).json({ message: 'Error al crear dispositivo.' });
+  }
+});
+
+// DELETE /api/admin/dispositivos/:id (Eliminar modelo de dispositivo)
+app.delete('/api/admin/dispositivos/:id', isAuth, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const check = await pool.query('SELECT rgt_id FROM registro WHERE dsp_id = $1 LIMIT 1', [id]);
+    if (check.rows.length > 0) {
+      return res.status(409).json({ message: 'No se puede eliminar un dispositivo que tiene registros activos.' });
+    }
+    const result = await pool.query('DELETE FROM dispositivo WHERE dsp_id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Dispositivo no encontrado.' });
+    }
+    res.json({ message: 'Dispositivo eliminado.' });
+  } catch (err) {
+    console.error('Error al eliminar dispositivo:', err);
+    res.status(500).json({ message: 'Error al eliminar dispositivo.' });
+  }
+});
+
 // ===================================================================================
 // RUTAS ADMIN - SERIES TYPES
 // ===================================================================================

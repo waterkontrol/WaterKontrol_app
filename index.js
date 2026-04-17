@@ -882,12 +882,25 @@ app.put('/api/dispositivo/nombre', isAuth, async (req, res) => {
 app.post('/api/dispositivo/parametros', async (req, res) => {
   console.log('🔧 Obteniendo parámetros para dispositivo ID:', req.body.dsp_id);
   try {
-    const result = await pool.query(`SELECT * 
-     FROM dispositivo_parametro 
-      JOIN parametros ON dispositivo_parametro.prt_id = parametros.prt_id
-      join registro on registro.dsp_id = dispositivo_parametro.dsp_id and registro.rgt_id = $3
-      join registro_valor on registro_valor.rgt_id = registro.rgt_id and registro_valor.prt_id = parametros.prt_id
-      WHERE registro.usr_id = $2 AND dispositivo_parametro.dsp_id = $1`, [req.body.dsp_id, req.body.usr_id, req.body.rgt_id]);
+    // Lee los valores actuales desde registro_valor, haciendo JOIN con parametros.
+    // Funciona tanto con el sistema nuevo (prt_ids en series_type) como con el viejo (dispositivo_parametro).
+    const result = await pool.query(`
+      SELECT
+        parametros.prt_id,
+        parametros.tipo,
+        parametros.nombre,
+        parametros.unidad,
+        parametros.valormin,
+        parametros.valormax,
+        registro_valor.valor,
+        registro.topic
+      FROM registro_valor
+      JOIN parametros ON registro_valor.prt_id = parametros.prt_id
+      JOIN registro ON registro_valor.rgt_id = registro.rgt_id
+      WHERE registro.rgt_id = $1
+        AND registro.usr_id = $2
+        AND registro.dsp_id = $3
+    `, [req.body.rgt_id, req.body.usr_id, req.body.dsp_id]);
     res.json(result.rows);
   } catch (err) {
     console.error('Error al obtener parametros:', err);

@@ -1119,6 +1119,24 @@ app.post('/api/dispositivo/registro', async (req, res) => {
   }
 });
 
+// POST /api/dispositivo/rele (Activar/desactivar un relé genérico)
+app.post('/api/dispositivo/rele', async (req, res) => {
+  const { topic, tipo, valor } = req.body;
+  if (!topic || !tipo || !valor) {
+    return res.status(400).json({ message: 'topic, tipo y valor son requeridos.' });
+  }
+  const message = JSON.stringify({ [tipo]: valor });
+  mqttClient.publish(topic.concat('/in'), message, { qos: 0, retain: false }, (err) => {
+    if (!err) {
+      console.log(`✅ Relé [${tipo}] → ${valor} | topic: ${topic}/in`);
+      res.status(200).json({ message: 'Relé actualizado.' });
+    } else {
+      console.error(`❌ Error al publicar relé:`, err);
+      res.status(500).json({ message: 'Error al enviar el comando.' });
+    }
+  });
+});
+
 app.post('/api/dispositivo/actualizar', async (req, res) => {
 console.log(req.body)
   const message = JSON.stringify({

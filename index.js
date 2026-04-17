@@ -2021,6 +2021,14 @@ const initializeApplicationServices = async () => {
           ALTER TABLE series_type ADD COLUMN IF NOT EXISTS prt_ids JSONB DEFAULT '[]'
         `);
         console.log('✅ Columna prt_ids en series_type verificada/creada');
+        await pool.query(`
+          ALTER TABLE dispositivo ALTER COLUMN abreviatura TYPE VARCHAR(20)
+        `);
+        console.log('✅ Columna abreviatura ampliada a VARCHAR(20)');
+        await pool.query(`
+          ALTER TABLE dispositivo ALTER COLUMN modelo TYPE VARCHAR(50)
+        `);
+        console.log('✅ Columna modelo ampliada a VARCHAR(50)');
         console.log('🔄 [DEBUG] Iniciando procesarMensajesMqtt...');
         procesarMensajesMqtt();
         console.log('🔄 [DEBUG] Llamando a iniciarEjecucionHorarios...');

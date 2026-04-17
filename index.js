@@ -879,6 +879,66 @@ app.put('/api/dispositivo/nombre', isAuth, async (req, res) => {
   }
 });
 
+// POST /api/dispositivo/sync-parametros (Sincronizar registro_valor con los prt_ids del series type)
+// Inserta las filas que falten sin tocar las que ya existen.
+app.post('/api/dispositivo/sync-parametros', async (req, res) => {
+  const { rgt_id, dsp_id, usr_id } = req.body;
+  if (!rgt_id || !dsp_id || !usr_id) {
+    return res.status(400).json({ message: 'rgt_id, dsp_id y usr_id son requeridos.' });
+  }
+  try {
+    // 1. Obtener el seriestype del dispositivo
+    const regResult = await pool.query(
+      `SELECT d.seriestype FROM registro r JOIN dispositivo d ON r.dsp_id = d.dsp_id
+       WHERE r.rgt_id = $1 AND r.usr_id = $2 AND r.dsp_id = $3`,
+      [rgt_id, usr_id, dsp_id]
+    );
+    if (regResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Registro no encontrado.' });
+    }
+    const { seriestype } = regResult.rows[0];
+
+    // 2. Obtener los prt_ids del series type
+    const stResult = await pool.query(
+      'SELECT prt_ids FROM series_type WHERE numero = $1', [seriestype]
+    );
+    if (stResult.rows.length === 0 || !stResult.rows[0].prt_ids || stResult.rows[0].prt_ids.length === 0) {
+      return res.status(200).json({ message: 'El series type no tiene parámetros definidos.', insertados: 0 });
+    }
+    const prtIds = stResult.rows[0].prt_ids;
+
+    // 3. Obtener los parámetros completos
+    const paramResult = await pool.query(
+      'SELECT * FROM parametros WHERE prt_id = ANY($1::int[]) ORDER BY prt_id',
+      [prtIds]
+    );
+
+    // 4. Ver cuáles prt_id ya existen en registro_valor para este rgt_id
+    const existResult = await pool.query(
+      'SELECT prt_id FROM registro_valor WHERE rgt_id = $1', [rgt_id]
+    );
+    const existingPrtIds = new Set(existResult.rows.map(r => r.prt_id));
+
+    // 5. Insertar solo los que faltan
+    let insertados = 0;
+    for (const param of paramResult.rows) {
+      if (!existingPrtIds.has(param.prt_id)) {
+        await pool.query(
+          'INSERT INTO registro_valor (rgt_id, prt_id, valor) VALUES ($1, $2, $3)',
+          [rgt_id, param.prt_id, param.valorini]
+        );
+        insertados++;
+        console.log(`✅ Parámetro sincronizado: [${param.tipo}] para rgt_id ${rgt_id}`);
+      }
+    }
+
+    res.json({ message: `Sincronización completada. ${insertados} parámetro(s) nuevo(s) insertado(s).`, insertados });
+  } catch (err) {
+    console.error('Error al sincronizar parámetros:', err);
+    res.status(500).json({ message: 'Error al sincronizar parámetros.' });
+  }
+});
+
 app.post('/api/dispositivo/parametros', async (req, res) => {
   console.log('🔧 Obteniendo parámetros para dispositivo ID:', req.body.dsp_id);
   try {

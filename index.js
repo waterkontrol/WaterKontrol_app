@@ -683,14 +683,75 @@ app.delete('/api/admin/dispositivos/:id', isAuth, isAdmin, async (req, res) => {
 });
 
 // ===================================================================================
+// RUTAS ADMIN - PARAMETROS
+// ===================================================================================
+
+// GET /api/admin/parametros (Listar todos los parámetros)
+app.get('/api/admin/parametros', isAuth, isAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM parametros ORDER BY prt_id ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al obtener parámetros:', err);
+    res.status(500).json({ message: 'Error al obtener parámetros.' });
+  }
+});
+
+// POST /api/admin/parametros (Crear un parámetro)
+app.post('/api/admin/parametros', isAuth, isAdmin, async (req, res) => {
+  const { tipo, nombre, valorini } = req.body;
+  if (!tipo || !nombre) {
+    return res.status(400).json({ message: 'tipo y nombre son requeridos.' });
+  }
+  try {
+    const result = await pool.query(
+      'INSERT INTO parametros (tipo, nombre, valorini) VALUES ($1, $2, $3) RETURNING *',
+      [tipo.trim().toLowerCase(), nombre.trim(), valorini != null ? String(valorini) : '0']
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'Ya existe un parámetro con ese tipo.' });
+    }
+    console.error('Error al crear parámetro:', err);
+    res.status(500).json({ message: 'Error al crear parámetro.' });
+  }
+});
+
+// DELETE /api/admin/parametros/:id (Eliminar un parámetro)
+app.delete('/api/admin/parametros/:id', isAuth, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM parametros WHERE prt_id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Parámetro no encontrado.' });
+    }
+    res.json({ message: 'Parámetro eliminado.' });
+  } catch (err) {
+    console.error('Error al eliminar parámetro:', err);
+    res.status(500).json({ message: 'Error al eliminar parámetro.' });
+  }
+});
+
+// ===================================================================================
 // RUTAS ADMIN - SERIES TYPES
 // ===================================================================================
 
-// GET /api/admin/series-types (Listar todos los series types)
+// GET /api/admin/series-types (Listar todos los series types con sus parámetros)
 app.get('/api/admin/series-types', isAuth, isAdmin, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM series_type ORDER BY numero ASC');
-    res.json(result.rows);
+    const stResult = await pool.query('SELECT * FROM series_type ORDER BY numero ASC');
+    const rows = stResult.rows;
+    const enriched = await Promise.all(rows.map(async (st) => {
+      const prtIds = st.prt_ids || [];
+      if (prtIds.length === 0) return { ...st, parametros_info: [] };
+      const pResult = await pool.query(
+        'SELECT * FROM parametros WHERE prt_id = ANY($1::int[]) ORDER BY prt_id',
+        [prtIds]
+      );
+      return { ...st, parametros_info: pResult.rows };
+    }));
+    res.json(enriched);
   } catch (err) {
     console.error('Error al obtener series types:', err);
     res.status(500).json({ message: 'Error al obtener series types.' });
@@ -699,14 +760,14 @@ app.get('/api/admin/series-types', isAuth, isAdmin, async (req, res) => {
 
 // POST /api/admin/series-types (Crear un series type)
 app.post('/api/admin/series-types', isAuth, isAdmin, async (req, res) => {
-  const { numero, variables } = req.body;
-  if (numero == null || !Array.isArray(variables)) {
-    return res.status(400).json({ message: 'Se requiere numero y variables.' });
+  const { numero, prt_ids } = req.body;
+  if (numero == null) {
+    return res.status(400).json({ message: 'Se requiere numero.' });
   }
   try {
     const result = await pool.query(
-      'INSERT INTO series_type (numero, variables) VALUES ($1, $2) RETURNING *',
-      [numero, JSON.stringify(variables)]
+      'INSERT INTO series_type (numero, variables, prt_ids) VALUES ($1, $2, $3) RETURNING *',
+      [numero, '[]', JSON.stringify(prt_ids || [])]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -721,14 +782,14 @@ app.post('/api/admin/series-types', isAuth, isAdmin, async (req, res) => {
 // PUT /api/admin/series-types/:id (Actualizar un series type)
 app.put('/api/admin/series-types/:id', isAuth, isAdmin, async (req, res) => {
   const { id } = req.params;
-  const { numero, variables } = req.body;
-  if (numero == null || !Array.isArray(variables)) {
-    return res.status(400).json({ message: 'Se requiere numero y variables.' });
+  const { numero, prt_ids } = req.body;
+  if (numero == null) {
+    return res.status(400).json({ message: 'Se requiere numero.' });
   }
   try {
     const result = await pool.query(
-      'UPDATE series_type SET numero = $1, variables = $2 WHERE st_id = $3 RETURNING *',
-      [numero, JSON.stringify(variables), id]
+      'UPDATE series_type SET numero = $1, prt_ids = $2 WHERE st_id = $3 RETURNING *',
+      [numero, JSON.stringify(prt_ids || []), id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Series type no encontrado.' });
@@ -758,15 +819,25 @@ app.delete('/api/admin/series-types/:id', isAuth, isAdmin, async (req, res) => {
   }
 });
 
-// GET /api/series-type/:numero (Obtener variables de un series type por número)
+// GET /api/series-type/:numero (Obtener un series type por número, incluyendo sus parámetros)
 app.get('/api/series-type/:numero', isAuth, async (req, res) => {
   const { numero } = req.params;
   try {
     const result = await pool.query('SELECT * FROM series_type WHERE numero = $1', [numero]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Series type no encontrado.', variables: [] });
+      return res.status(404).json({ message: 'Series type no encontrado.', variables: [], parametros: [] });
     }
-    res.json(result.rows[0]);
+    const st = result.rows[0];
+    const prtIds = st.prt_ids || [];
+    let parametros = [];
+    if (prtIds.length > 0) {
+      const pResult = await pool.query(
+        'SELECT * FROM parametros WHERE prt_id = ANY($1::int[]) ORDER BY prt_id',
+        [prtIds]
+      );
+      parametros = pResult.rows;
+    }
+    res.json({ ...st, parametros });
   } catch (err) {
     console.error('Error al obtener series type:', err);
     res.status(500).json({ message: 'Error al obtener series type.' });
@@ -862,17 +933,32 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
     const resultReg = await client.query(insertQueryReg, [userId, dsp.dsp_id, topic, nombre, serial]);
     
-    const result1 = await pool.query(`SELECT * 
-     FROM dispositivo_parametro 
-      JOIN parametros ON dispositivo_parametro.prt_id = parametros.prt_id
-      WHERE dispositivo_parametro.dsp_id = $1`, [dsp.dsp_id]);
+    // Obtener parámetros desde el series_type (nuevo sistema) o desde dispositivo_parametro (fallback)
+    let parametrosList = [];
+    const stResult = await pool.query('SELECT * FROM series_type WHERE numero = $1', [tipoBusqueda]);
+    if (stResult.rows.length > 0 && stResult.rows[0].prt_ids && stResult.rows[0].prt_ids.length > 0) {
+      const prtIds = stResult.rows[0].prt_ids;
+      const paramResult = await pool.query(
+        'SELECT * FROM parametros WHERE prt_id = ANY($1::int[]) ORDER BY prt_id',
+        [prtIds]
+      );
+      parametrosList = paramResult.rows;
+      console.log(`✅ Parámetros obtenidos desde series_type (${parametrosList.length}):`, parametrosList.map(p => p.tipo));
+    } else {
+      const result1 = await pool.query(`SELECT *
+        FROM dispositivo_parametro
+        JOIN parametros ON dispositivo_parametro.prt_id = parametros.prt_id
+        WHERE dispositivo_parametro.dsp_id = $1`, [dsp.dsp_id]);
+      parametrosList = result1.rows;
+      console.log(`⚠️ Parámetros obtenidos desde dispositivo_parametro (fallback, ${parametrosList.length})`);
+    }
 
-    for(const row of result1.rows){
+    for(const row of parametrosList){
       const insertQueryVal = `
-        INSERT INTO registro_valor (rgt_id, prt_id, valor)  
+        INSERT INTO registro_valor (rgt_id, prt_id, valor)
         VALUES ($1, $2, $3);
         `;
-      const resultVal = await client.query(insertQueryVal, [resultReg.rows[0].rgt_id, row.prt_id, row.valorini]);
+      await client.query(insertQueryVal, [resultReg.rows[0].rgt_id, row.prt_id, row.valorini]);
     }
 
     await client.query('COMMIT');
@@ -1838,6 +1924,19 @@ const initializeApplicationServices = async () => {
           )
         `);
         console.log('✅ Tabla seriales verificada/creada');
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS parametros (
+            prt_id SERIAL PRIMARY KEY,
+            tipo VARCHAR NOT NULL UNIQUE,
+            nombre VARCHAR NOT NULL,
+            valorini VARCHAR DEFAULT '0'
+          )
+        `);
+        console.log('✅ Tabla parametros verificada/creada');
+        await pool.query(`
+          ALTER TABLE series_type ADD COLUMN IF NOT EXISTS prt_ids JSONB DEFAULT '[]'
+        `);
+        console.log('✅ Columna prt_ids en series_type verificada/creada');
         console.log('🔄 [DEBUG] Iniciando procesarMensajesMqtt...');
         procesarMensajesMqtt();
         console.log('🔄 [DEBUG] Llamando a iniciarEjecucionHorarios...');

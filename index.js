@@ -546,6 +546,28 @@ app.post('/api/admin/seriales', isAuth, isAdmin, async (req, res) => {
   }
 });
 
+// PUT /api/admin/seriales/:id (Editar seriestype de un serial)
+app.put('/api/admin/seriales/:id', isAuth, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { seriestype } = req.body;
+  if (!seriestype) {
+    return res.status(400).json({ message: 'Se requiere seriestype.' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE seriales SET seriestype = $1 WHERE srl_id = $2 RETURNING *',
+      [seriestype, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Serial no encontrado.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error al editar serial:', err);
+    res.status(500).json({ message: 'Error al editar serial.' });
+  }
+});
+
 // DELETE /api/admin/seriales/:id (Eliminar un serial)
 app.delete('/api/admin/seriales/:id', isAuth, isAdmin, async (req, res) => {
   const { id } = req.params;

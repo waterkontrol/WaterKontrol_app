@@ -632,8 +632,8 @@ app.post('/api/admin/dispositivos', isAuth, isAdmin, async (req, res) => {
     if (err.code === '23505') {
       return res.status(409).json({ message: 'Ya existe un dispositivo con ese modelo o abreviatura.' });
     }
-    console.error('Error al crear dispositivo:', err);
-    res.status(500).json({ message: 'Error al crear dispositivo.' });
+    console.error('Error al crear dispositivo:', err.message, err.detail, err.code);
+    res.status(500).json({ message: err.message || 'Error al crear dispositivo.' });
   }
 });
 

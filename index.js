@@ -879,6 +879,30 @@ app.put('/api/dispositivo/nombre', isAuth, async (req, res) => {
   }
 });
 
+// PUT /api/dispositivo/parametro-alias (Cambiar nombre visible de un parámetro para un dispositivo)
+app.put('/api/dispositivo/parametro-alias', isAuth, async (req, res) => {
+  const { rgt_id, prt_id, alias } = req.body;
+  if (!rgt_id || !prt_id) {
+    return res.status(400).json({ message: 'rgt_id y prt_id son requeridos.' });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE registro_valor SET alias = $1
+       WHERE rgt_id = $2 AND prt_id = $3
+         AND EXISTS (SELECT 1 FROM registro WHERE rgt_id = $2 AND usr_id = $4)
+       RETURNING *`,
+      [alias?.trim() || null, rgt_id, prt_id, req.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Parámetro no encontrado.' });
+    }
+    res.json({ message: 'Nombre actualizado.', alias: result.rows[0].alias });
+  } catch (err) {
+    console.error('Error al actualizar alias:', err);
+    res.status(500).json({ message: 'Error al actualizar el nombre.' });
+  }
+});
+
 // POST /api/dispositivo/sync-parametros (Sincronizar registro_valor con los prt_ids del series type)
 // Inserta las filas que falten sin tocar las que ya existen.
 app.post('/api/dispositivo/sync-parametros', async (req, res) => {
@@ -2029,6 +2053,10 @@ const initializeApplicationServices = async () => {
           ALTER TABLE dispositivo ALTER COLUMN modelo TYPE VARCHAR(50)
         `);
         console.log('✅ Columna modelo ampliada a VARCHAR(50)');
+        await pool.query(`
+          ALTER TABLE registro_valor ADD COLUMN IF NOT EXISTS alias VARCHAR
+        `);
+        console.log('✅ Columna alias en registro_valor verificada/creada');
         console.log('🔄 [DEBUG] Iniciando procesarMensajesMqtt...');
         procesarMensajesMqtt();
         console.log('🔄 [DEBUG] Llamando a iniciarEjecucionHorarios...');

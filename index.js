@@ -999,6 +999,7 @@ app.post('/api/dispositivo/parametros', async (req, res) => {
         parametros.valormin,
         parametros.valormax,
         registro_valor.valor,
+        registro_valor.alias,
         registro.topic
       FROM registro_valor
       JOIN parametros ON registro_valor.prt_id = parametros.prt_id

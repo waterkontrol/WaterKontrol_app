@@ -623,8 +623,8 @@ app.post('/api/admin/dispositivos', isAuth, isAdmin, async (req, res) => {
   }
   try {
     const result = await pool.query(
-      `INSERT INTO dispositivo (modelo, abreviatura, seriestype, marca, estatus)
-       VALUES ($1, $2, $3, $4, 'A') RETURNING *`,
+      `INSERT INTO dispositivo (modelo, abreviatura, seriestype, marca, estatus, fecha_creacion)
+       VALUES ($1, $2, $3, $4, 'A', NOW()) RETURNING *`,
       [modelo.trim().toUpperCase(), abreviatura.trim().toUpperCase(), seriestype, marca?.trim() || null]
     );
     res.status(201).json(result.rows[0]);

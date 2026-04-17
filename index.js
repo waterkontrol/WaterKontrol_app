@@ -699,14 +699,22 @@ app.get('/api/admin/parametros', isAuth, isAdmin, async (req, res) => {
 
 // POST /api/admin/parametros (Crear un parámetro)
 app.post('/api/admin/parametros', isAuth, isAdmin, async (req, res) => {
-  const { tipo, nombre, valorini } = req.body;
+  const { tipo, nombre, valorini, unidad, valormin, valormax } = req.body;
   if (!tipo || !nombre) {
     return res.status(400).json({ message: 'tipo y nombre son requeridos.' });
   }
   try {
     const result = await pool.query(
-      'INSERT INTO parametros (tipo, nombre, valorini) VALUES ($1, $2, $3) RETURNING *',
-      [tipo.trim().toLowerCase(), nombre.trim(), valorini != null ? String(valorini) : '0']
+      `INSERT INTO parametros (tipo, nombre, valorini, unidad, valormin, valormax)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [
+        tipo.trim().toLowerCase(),
+        nombre.trim(),
+        valorini != null ? String(valorini) : '0',
+        unidad ? unidad.trim() : null,
+        valormin != null && valormin !== '' ? String(valormin) : null,
+        valormax != null && valormax !== '' ? String(valormax) : null,
+      ]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -1929,6 +1937,9 @@ const initializeApplicationServices = async () => {
             prt_id SERIAL PRIMARY KEY,
             tipo VARCHAR NOT NULL UNIQUE,
             nombre VARCHAR NOT NULL,
+            unidad VARCHAR,
+            valormin VARCHAR,
+            valormax VARCHAR,
             valorini VARCHAR DEFAULT '0'
           )
         `);

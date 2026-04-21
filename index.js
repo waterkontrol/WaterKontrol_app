@@ -491,9 +491,11 @@ app.post('/auth/reset', async (req, res) => {
 // GET /api/dispositivos (Listar dispositivos del usuario)
 app.get('/api/dispositivos', isAuth, async (req, res) => {
   try {
-    // const result = await pool.query('SELECT * FROM dispositivo WHERE usuario_id = $1', [req.userId]);
-    const result = await pool.query(`SELECT * FROM dispositivo 
-      JOIN registro ON dispositivo.dsp_id = registro.dsp_id 
+    const result = await pool.query(`
+      SELECT dispositivo.*, registro.rgt_id, registro.nombre_registrado, registro.serial,
+             registro.fecha_registro, registro.topic, registro.pago, registro.pago_expira
+      FROM dispositivo
+      JOIN registro ON dispositivo.dsp_id = registro.dsp_id
       WHERE registro.usr_id = $1`, [req.userId]);
     res.json(result.rows);
   } catch (err) {

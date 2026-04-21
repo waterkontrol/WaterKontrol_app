@@ -587,22 +587,37 @@ app.delete('/api/admin/seriales/:id', isAuth, isAdmin, async (req, res) => {
 // RUTAS ADMIN - USUARIOS
 // ===================================================================================
 
-// GET /api/admin/usuarios (Listar todos los usuarios)
+// GET /api/admin/usuarios (Listar todos los usuarios con sus dispositivos registrados)
 app.get('/api/admin/usuarios', isAuth, isAdmin, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT usr_id, nombre, correo, estatus, role, pago, pago_expira
-       FROM usuario ORDER BY usr_id ASC`
+    const usuariosResult = await pool.query(
+      `SELECT usr_id, nombre, correo, estatus, role FROM usuario ORDER BY usr_id ASC`
     );
-    res.json(result.rows);
+    const usuarios = usuariosResult.rows;
+
+    // Para cada usuario, obtener sus dispositivos registrados
+    const enriched = await Promise.all(usuarios.map(async (u) => {
+      const devResult = await pool.query(
+        `SELECT r.rgt_id, r.nombre_registrado, r.serial, r.fecha_registro, r.pago, r.pago_expira,
+                d.modelo, d.abreviatura, d.seriestype
+         FROM registro r
+         JOIN dispositivo d ON r.dsp_id = d.dsp_id
+         WHERE r.usr_id = $1
+         ORDER BY r.fecha_registro DESC`,
+        [u.usr_id]
+      );
+      return { ...u, dispositivos: devResult.rows };
+    }));
+
+    res.json(enriched);
   } catch (err) {
     console.error('Error al obtener usuarios:', err);
     res.status(500).json({ message: 'Error al obtener la lista de usuarios.' });
   }
 });
 
-// PUT /api/admin/usuarios/:id/pago (Actualizar estado de pago)
-app.put('/api/admin/usuarios/:id/pago', isAuth, isAdmin, async (req, res) => {
+// PUT /api/admin/registro/:id/pago (Actualizar estado de pago por dispositivo)
+app.put('/api/admin/registro/:id/pago', isAuth, isAdmin, async (req, res) => {
   const { id } = req.params;
   const { pago } = req.body;
   const estadosValidos = ['pago', 'por_vencer', 'no_pago'];
@@ -612,16 +627,16 @@ app.put('/api/admin/usuarios/:id/pago', isAuth, isAdmin, async (req, res) => {
   try {
     const pagoExpira = pago === 'pago' ? "NOW() + INTERVAL '1 month'" : 'NULL';
     const result = await pool.query(
-      `UPDATE usuario SET pago = $1, pago_expira = ${pagoExpira} WHERE usr_id = $2
-       RETURNING usr_id, nombre, correo, estatus, role, pago, pago_expira`,
+      `UPDATE registro SET pago = $1, pago_expira = ${pagoExpira} WHERE rgt_id = $2
+       RETURNING rgt_id, pago, pago_expira`,
       [pago, id]
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Usuario no encontrado.' });
+      return res.status(404).json({ message: 'Registro no encontrado.' });
     }
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('Error al actualizar pago:', err);
+    console.error('Error al actualizar pago del dispositivo:', err);
     res.status(500).json({ message: 'Error al actualizar estado de pago.' });
   }
 });
@@ -2098,6 +2113,13 @@ const initializeApplicationServices = async () => {
           ALTER TABLE registro_valor ADD COLUMN IF NOT EXISTS alias VARCHAR
         `);
         console.log('✅ Columna alias en registro_valor verificada/creada');
+        await pool.query(`
+          ALTER TABLE registro ADD COLUMN IF NOT EXISTS pago VARCHAR DEFAULT 'no_pago'
+        `);
+        await pool.query(`
+          ALTER TABLE registro ADD COLUMN IF NOT EXISTS pago_expira TIMESTAMPTZ
+        `);
+        console.log('✅ Columnas pago/pago_expira en registro verificadas/creadas');
         console.log('🔄 [DEBUG] Iniciando procesarMensajesMqtt...');
         procesarMensajesMqtt();
         console.log('🔄 [DEBUG] Llamando a iniciarEjecucionHorarios...');

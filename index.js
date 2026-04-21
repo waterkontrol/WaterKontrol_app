@@ -488,6 +488,23 @@ app.post('/auth/reset', async (req, res) => {
 // RUTAS DE LA API (Requieren autenticación)
 // ===================================================================================
 
+// GET /api/dispositivo/:rgt_id/pago (Verificar estado de pago de un dispositivo)
+app.get('/api/dispositivo/:rgt_id/pago', isAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT pago, pago_expira FROM registro WHERE rgt_id = $1 AND usr_id = $2`,
+      [req.params.rgt_id, req.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Dispositivo no encontrado.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error al verificar pago:', err);
+    res.status(500).json({ message: 'Error al verificar pago.' });
+  }
+});
+
 // GET /api/dispositivos (Listar dispositivos del usuario)
 app.get('/api/dispositivos', isAuth, async (req, res) => {
   try {

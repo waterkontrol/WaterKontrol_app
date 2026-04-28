@@ -71,6 +71,9 @@ const testDatabaseConnection = async () => {
 // ===================================================================================
 let mqttClient;
 
+// Map de ACKs pendientes para configuración de nivel: baseTopic → { resolve, reject, timeout }
+const pendingNivelAck = new Map();
+
 // const connectMqtt = () => {
   
 //   const url = process.env.MQTT_BROKER_URL || 'mqtt://test.mosquitto.org';
@@ -935,6 +938,61 @@ app.put('/api/dispositivo/nombre', isAuth, async (req, res) => {
   }
 });
 
+// PUT /api/dispositivo/nivel-config (Enviar config por MQTT, esperar ACK y guardar en DB)
+app.put('/api/dispositivo/nivel-config', isAuth, async (req, res) => {
+  const { rgt_id, prt_id, valormin, valormax } = req.body;
+  if (!rgt_id || !prt_id || valormin == null || valormax == null) {
+    return res.status(400).json({ message: 'rgt_id, prt_id, valormin y valormax son requeridos.' });
+  }
+
+  try {
+    // 1. Obtener el topic del dispositivo
+    const regResult = await pool.query(
+      `SELECT topic FROM registro WHERE rgt_id = $1 AND usr_id = $2`,
+      [rgt_id, req.userId]
+    );
+    if (regResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Dispositivo no encontrado.' });
+    }
+    const topic = regResult.rows[0].topic;
+    const topicIn = topic + '/in';
+    const topicOutBase = topic; // sin /out — el ACK llegará en topic/out
+
+    // 2. Publicar config por MQTT
+    const mqttMessage = JSON.stringify({ valormin: Number(valormin), valormax: Number(valormax) });
+    mqttClient.publish(topicIn, mqttMessage, { qos: 1, retain: false }, (err) => {
+      if (err) console.error('❌ Error publicando config de nivel:', err);
+      else console.log(`📤 Config de nivel enviada a [${topicIn}]: ${mqttMessage}`);
+    });
+
+    // 3. Esperar ACK del dispositivo (respuesta en topic/out) con timeout de 15s
+    await new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        pendingNivelAck.delete(topicOutBase);
+        reject(new Error('TIMEOUT'));
+      }, 15000);
+      pendingNivelAck.set(topicOutBase, { resolve, reject, timeout: timeoutId });
+    });
+
+    // 4. ACK recibido — guardar en DB
+    const result = await pool.query(
+      `UPDATE registro_valor SET valormin = $1, valormax = $2
+       WHERE rgt_id = $3 AND prt_id = $4
+       RETURNING valormin, valormax`,
+      [String(valormin), String(valormax), rgt_id, prt_id]
+    );
+
+    res.json({ message: 'Configuración guardada.', valormin: result.rows[0].valormin, valormax: result.rows[0].valormax });
+
+  } catch (err) {
+    if (err.message === 'TIMEOUT') {
+      return res.status(408).json({ message: 'El dispositivo no respondió. Verifica que esté encendido y conectado.' });
+    }
+    console.error('Error al guardar configuración de nivel:', err);
+    res.status(500).json({ message: 'Error al guardar configuración.' });
+  }
+});
+
 // PUT /api/dispositivo/parametro-alias (Cambiar nombre visible de un parámetro para un dispositivo)
 app.put('/api/dispositivo/parametro-alias', isAuth, async (req, res) => {
   const { rgt_id, prt_id, alias } = req.body;
@@ -1030,8 +1088,8 @@ app.post('/api/dispositivo/parametros', async (req, res) => {
         parametros.tipo,
         parametros.nombre,
         parametros.unidad,
-        parametros.valormin,
-        parametros.valormax,
+        COALESCE(registro_valor.valormin, parametros.valormin) AS valormin,
+        COALESCE(registro_valor.valormax, parametros.valormax) AS valormax,
         registro_valor.valor,
         registro_valor.alias,
         registro.topic
@@ -1731,6 +1789,17 @@ const procesarMensajesMqtt = () => {
   
   mqttClient.on('message', async (topic, message) => {
     console.log(`📥 Mensaje recibido en topic [${topic}]: ${message.toString()}`);
+
+    // Resolver ACK de configuración de nivel si hay uno pendiente para este topic
+    const baseTopic = topic.replace('/out', '');
+    if (pendingNivelAck.has(baseTopic)) {
+      const ack = pendingNivelAck.get(baseTopic);
+      pendingNivelAck.delete(baseTopic);
+      clearTimeout(ack.timeout);
+      console.log(`✅ ACK de configuración recibido en topic [${topic}]`);
+      ack.resolve(message.toString());
+    }
+
     const parts = topic.split('/');
     // if (parts.length !== 3 || parts[2] !== 'telemetria') return;
     const serie = parts[2];
@@ -2131,7 +2200,13 @@ const initializeApplicationServices = async () => {
         await pool.query(`
           ALTER TABLE registro_valor ADD COLUMN IF NOT EXISTS alias VARCHAR
         `);
-        console.log('✅ Columna alias en registro_valor verificada/creada');
+        await pool.query(`
+          ALTER TABLE registro_valor ADD COLUMN IF NOT EXISTS valormin VARCHAR
+        `);
+        await pool.query(`
+          ALTER TABLE registro_valor ADD COLUMN IF NOT EXISTS valormax VARCHAR
+        `);
+        console.log('✅ Columnas alias/valormin/valormax en registro_valor verificadas/creadas');
         await pool.query(`
           ALTER TABLE registro ADD COLUMN IF NOT EXISTS pago VARCHAR DEFAULT 'no_pago'
         `);

@@ -940,7 +940,7 @@ app.put('/api/dispositivo/nombre', isAuth, async (req, res) => {
 
 // PUT /api/dispositivo/nivel-config (Enviar config por MQTT, esperar ACK y guardar en DB)
 app.put('/api/dispositivo/nivel-config', isAuth, async (req, res) => {
-  const { rgt_id, prt_id, valormin, valormax } = req.body;
+  const { rgt_id, prt_id, valormin, valormax, mqttKeyMin = 'valormin', mqttKeyMax = 'valormax' } = req.body;
   if (!rgt_id || !prt_id || valormin == null || valormax == null) {
     return res.status(400).json({ message: 'rgt_id, prt_id, valormin y valormax son requeridos.' });
   }
@@ -958,8 +958,9 @@ app.put('/api/dispositivo/nivel-config', isAuth, async (req, res) => {
     const topicIn = topic + '/in';
     const topicOutBase = topic; // sin /out — el ACK llegará en topic/out
 
-    // 2. Publicar config por MQTT
-    const mqttMessage = JSON.stringify({ valormin: Number(valormin), valormax: Number(valormax) });
+    // 2. Publicar config por MQTT (usando las keys MQTT correctas según el tipo de parámetro)
+    const mqttPayload = { [mqttKeyMin]: Number(valormin), [mqttKeyMax]: Number(valormax) };
+    const mqttMessage = JSON.stringify(mqttPayload);
     mqttClient.publish(topicIn, mqttMessage, { qos: 1, retain: false }, (err) => {
       if (err) console.error('❌ Error publicando config de nivel:', err);
       else console.log(`📤 Config de nivel enviada a [${topicIn}]: ${mqttMessage}`);

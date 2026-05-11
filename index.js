@@ -513,7 +513,8 @@ app.get('/api/dispositivos', isAuth, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT dispositivo.*, registro.rgt_id, registro.nombre_registrado, registro.serial,
-             registro.fecha_registro, registro.topic, registro.pago, registro.pago_expira
+             registro.fecha_registro, registro.topic || '/' || registro.usr_id AS topic,
+             registro.pago, registro.pago_expira
       FROM dispositivo
       JOIN registro ON dispositivo.dsp_id = registro.dsp_id
       WHERE registro.usr_id = $1`, [req.userId]);

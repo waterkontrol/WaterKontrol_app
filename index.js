@@ -95,17 +95,17 @@ const pendingNivelAck = new Map();
 
 const connectMqtt = async () => {
 
-  const result = await pool.query('SELECT topic FROM registro');
- 
+  const result = await pool.query('SELECT topic, usr_id FROM registro');
+
   const url = process.env.MQTT_BROKER_URL || 'mqtt://test.mosquitto.org';
   mqttClient = mqtt.connect(url);
 
   mqttClient.on('connect', () => {
     console.log('✅ Conexión a MQTT Broker exitosa.');
     // const telemetryTopic = 'mk-208/VB/E8:6B:EA:DE:ED:74';
-    
+
     result.rows.forEach(row => {
-      const telemetryTopic = row.topic.concat('/out');
+      const telemetryTopic = `${row.topic}/${row.usr_id}/out`;
 
       mqttClient.subscribe(telemetryTopic, (err) => {
         if (!err) {
@@ -1184,7 +1184,8 @@ app.post('/api/dispositivo/registro', async (req, res) => {
 
     await client.query('COMMIT');
 
-    const telemetryTopic = topic.concat('/out');
+    const topicWithUser = `${topic}/${userId}`;
+    const telemetryTopic = `${topicWithUser}/out`;
 
     mqttClient.subscribe(telemetryTopic, (err) => {
       if (!err) {
@@ -1197,7 +1198,7 @@ app.post('/api/dispositivo/registro', async (req, res) => {
     res.status(201).json({
       message: 'Dispositivo registrado exitosamente en la plataforma.',
       dispositivo_id: dsp.dsp_id,
-      topic: topic
+      topic: topicWithUser
     });
 
   } catch (error) {

@@ -955,7 +955,7 @@ app.put('/api/dispositivo/nivel-config', isAuth, async (req, res) => {
     if (regResult.rows.length === 0) {
       return res.status(404).json({ message: 'Dispositivo no encontrado.' });
     }
-    const topic = regResult.rows[0].topic;
+    const topic = `${regResult.rows[0].topic}/${req.userId}`;
     const topicIn = topic + '/in';
     const topicOutBase = topic; // sin /out — el ACK llegará en topic/out
 
@@ -1094,7 +1094,7 @@ app.post('/api/dispositivo/parametros', async (req, res) => {
         COALESCE(registro_valor.valormax, parametros.valormax) AS valormax,
         registro_valor.valor,
         registro_valor.alias,
-        registro.topic
+        registro.topic || '/' || registro.usr_id AS topic
       FROM registro_valor
       JOIN parametros ON registro_valor.prt_id = parametros.prt_id
       JOIN registro ON registro_valor.rgt_id = registro.rgt_id

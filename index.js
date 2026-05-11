@@ -1836,12 +1836,21 @@ const procesarMensajesMqtt = () => {
       await dbClient.query('BEGIN');
 
       // const deviceResult = await dbClient.query('SELECT frb_token FROM sesion join usuario on sesion.usuario_id = usuario.usr_id WHERE serial = $1', [serie]);
-      const deviceResult = await dbClient.query('SELECT registro.rgt_id, sesion.frb_token FROM registro join sesion on registro.usr_id = sesion.usuario_id WHERE registro.serial = $1 AND sesion.frb_token IS NOT null', [serie]);
+      const deviceResult = await dbClient.query(
+        'SELECT registro.rgt_id FROM registro WHERE registro.serial = $1',
+        [serie]
+      );
       if (deviceResult.rows.length === 0) {
         await dbClient.query('ROLLBACK');
         return;
       }
       const rgt_id = deviceResult.rows[0].rgt_id;
+
+      // Tokens Firebase solo para notificaciones (pueden no existir)
+      const tokenResult = await dbClient.query(
+        'SELECT sesion.frb_token FROM registro JOIN sesion ON registro.usr_id = sesion.usuario_id WHERE registro.serial = $1 AND sesion.frb_token IS NOT NULL',
+        [serie]
+      );
       // const frb_token = deviceResult.rows[0].frb_token;
 
       // const telemetryInsert = `
@@ -1888,7 +1897,7 @@ const procesarMensajesMqtt = () => {
 
       await dbClient.query('COMMIT');
 
-      for (const row of deviceResult.rows){
+      for (const row of tokenResult.rows){
         console.log('🔧 Enviando notificación a token:', row.frb_token);
         admin.messaging().send({...msg, token: row.frb_token
           })

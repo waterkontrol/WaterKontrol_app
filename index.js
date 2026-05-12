@@ -17,6 +17,9 @@ const admin = require('firebase-admin');
 // const serviceAccount = require('./serviceAccountKey.json');
 const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT);
 
+// Mapa en memoria para guardar el último error de registro por userId
+const lastRegistrationError = new Map();
+
 // --- CONFIGURACIÓN DE EXPRESS ---
 const app = express();
 
@@ -1145,6 +1148,15 @@ app.get('/api/serial/verificar/:serial', async (req, res) => {
   }
 });
 
+// GET /api/registro/ultimo-error (Último error de registro para el usuario autenticado)
+app.get('/api/registro/ultimo-error', isAuth, (req, res) => {
+  const entry = lastRegistrationError.get(String(req.userId));
+  if (!entry) return res.json({ message: null });
+  // Limpiar después de leerlo
+  lastRegistrationError.delete(String(req.userId));
+  res.json({ message: entry.message });
+});
+
 // POST /api/dispositivo/registro (Registrar dispositivo)
 app.post('/api/dispositivo/registro', async (req, res) => {
   const { tipo, seriestype, nombre, serial, userId } = req.body;
@@ -1159,7 +1171,9 @@ app.post('/api/dispositivo/registro', async (req, res) => {
       [serial.trim().toUpperCase()]
     );
     if (serialCheck.rows.length === 0) {
-      return res.status(404).json({ message: `El serial ${serial} no existe. Contacte al administrador.` });
+      const errorMsg = `El serial ${serial} no existe. Contacte al administrador.`;
+      lastRegistrationError.set(String(userId), { message: errorMsg, ts: Date.now() });
+      return res.status(404).json({ message: errorMsg });
     }
   } catch (err) {
     console.error('Error al verificar serial:', err);

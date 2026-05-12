@@ -1109,6 +1109,22 @@ app.post('/api/dispositivo/parametros', async (req, res) => {
   }
 });
 
+// GET /api/dispositivo/online/:rgt_id
+app.get('/api/dispositivo/online/:rgt_id', isAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT ultima_conexion FROM registro WHERE rgt_id = $1 AND usr_id = $2`,
+      [req.params.rgt_id, req.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ online: false });
+    const ultima = result.rows[0].ultima_conexion;
+    const diffSeg = ultima ? (Date.now() - new Date(ultima).getTime()) / 1000 : 9999;
+    res.json({ online: diffSeg <= 20, ultima_conexion: ultima });
+  } catch (err) {
+    res.status(500).json({ online: false });
+  }
+});
+
 // GET /api/serial/verificar/:serial
 app.get('/api/serial/verificar/:serial', async (req, res) => {
   const serial = (req.params.serial || '').trim().toUpperCase();
@@ -1886,7 +1902,7 @@ const procesarMensajesMqtt = () => {
           estatus = 'A'
         WHERE rgt_id = $1;
       `;
-      // await dbClient.query(updateDevice, [rgt_id]);
+      await dbClient.query(updateDevice, [rgt_id]);
 
       console.log(JSON.parse(message.toString().replace(/'/g, '"')));
       const messageJ = JSON.parse(message.toString().replace(/'/g, '"'));

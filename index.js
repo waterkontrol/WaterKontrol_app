@@ -1109,6 +1109,26 @@ app.post('/api/dispositivo/parametros', async (req, res) => {
   }
 });
 
+// GET /api/serial/verificar/:serial
+app.get('/api/serial/verificar/:serial', async (req, res) => {
+  const serial = (req.params.serial || '').trim().toUpperCase();
+  if (!serial) return res.status(400).json({ valido: false, message: 'Serial requerido.' });
+  try {
+    const result = await pool.query('SELECT srl_id FROM seriales WHERE serial = $1', [serial]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ valido: false, message: `El serial ${serial} no está registrado. Contacte al administrador.` });
+    }
+    const usado = await pool.query('SELECT rgt_id FROM registro WHERE serial = $1', [serial]);
+    if (usado.rows.length > 0) {
+      return res.status(409).json({ valido: false, message: `El serial ${serial} ya está en uso por otro usuario.` });
+    }
+    return res.status(200).json({ valido: true });
+  } catch (err) {
+    console.error('Error al verificar serial:', err);
+    return res.status(500).json({ valido: false, message: 'Error al verificar el serial.' });
+  }
+});
+
 // POST /api/dispositivo/registro (Registrar dispositivo)
 app.post('/api/dispositivo/registro', async (req, res) => {
   const { tipo, seriestype, nombre, serial, userId } = req.body;

@@ -2031,7 +2031,7 @@ const ejecutarHorarios = async () => {
     
     // Obtener todos los horarios activos (activo = true)
     const horariosResult = await client.query(
-      `SELECT h.*, r.topic 
+      `SELECT h.*, r.topic || '/' || r.usr_id AS topic
        FROM horarios h
        JOIN registro r ON h.serial = r.serial
        WHERE h.activo = true`

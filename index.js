@@ -333,7 +333,7 @@ app.post('/auth/login', async (req, res) => {
     }
 
     const user = result.rows[0];
-    if (columns.hasEstatus && user.estatus && !isEstatusActivo(user.estatus, columns.estatusType)) {
+    if (columns.hasEstatus && user.estatus !== null && user.estatus !== undefined && !isEstatusActivo(user.estatus, columns.estatusType)) {
       return res.status(403).json({ message: 'Cuenta pendiente de verificación.' });
     }
     const match = await bcrypt.compare(clave, user.clave);
@@ -2146,19 +2146,18 @@ const iniciarEjecucionHorarios = () => {
       console.error('❌ Error en ejecución inicial de horarios:', err);
     });
     
-    // Alinear ejecución al inicio del minuto para evitar desfases (ej. 20s)
-    const now = new Date();
-    const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-    horariosTimeout = setTimeout(() => {
-      ejecutarHorarios().catch(err => {
-        console.error('❌ Error en ejecución periódica (alineada) de horarios:', err);
-      });
-      horariosInterval = setInterval(() => {
+    // Re-alinear en cada disparo para evitar desfase acumulado
+    const scheduleNext = () => {
+      const now = new Date();
+      const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+      horariosTimeout = setTimeout(() => {
         ejecutarHorarios().catch(err => {
-          console.error('❌ Error en ejecución periódica (alineada) de horarios:', err);
+          console.error('❌ Error en ejecución periódica de horarios:', err);
         });
-      }, 60000);
-    }, Math.max(0, msToNextMinute));
+        scheduleNext();
+      }, Math.max(0, msToNextMinute));
+    };
+    scheduleNext();
     
     console.log('✅ Sistema de ejecución de horarios iniciado (verificación cada minuto)');
   } catch (error) {

@@ -263,7 +263,7 @@ const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-const sendVerificationCodeEmail = async (correo, code) => {
+const sendVerificationCodeEmail = async (correo, code, nombre) => {
   if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM) {
     throw new Error('RESEND_API_KEY o RESEND_FROM no configurado.');
   }
@@ -271,8 +271,23 @@ const sendVerificationCodeEmail = async (correo, code) => {
     from: RESEND_FROM,
     to: correo,
     subject: 'Código de verificación - Kontrol',
-    text: `Tu código de verificación es: ${code}`,
-    html: `<p>Tu código de verificación es:</p><p><strong>${code}</strong></p>`
+    text: `Hola ${nombre},\n\nHemos recibido una solicitud para verificar tu identidad.\nTu código de verificación es:\n\n🔑 ${code}\n\nNo lo compartas con nadie.\n\nAbrí la app para verificar tu cuenta: com.kontrol.app://verify?correo=${encodeURIComponent(correo)}\n\nSi no solicitaste este código, por favor ignora este mensaje.\n\nSaludos,\nEl equipo de KONTROL\nhttps://app.kontrol-iot.net/`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#222;">
+        <p>Hola <strong>${nombre}</strong>,</p>
+        <p>Hemos recibido una solicitud para verificar tu identidad.<br>Tu código de verificación es:</p>
+        <div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;background:#f4f4f4;padding:20px;border-radius:8px;margin:24px 0;">
+          🔑 ${code}
+        </div>
+        <p style="color:#666;">No lo compartas con nadie.</p>
+        <div style="text-align:center;margin:24px 0;">
+          <a href="com.kontrol.app://verify?correo=${encodeURIComponent(correo)}" style="background:#1565c0;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:16px;font-weight:bold;">Abrir app para verificar</a>
+        </div>
+        <p style="color:#666;">Si no solicitaste este código, por favor ignora este mensaje.</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+        <p style="color:#999;font-size:13px;">Saludos,<br><strong>El equipo de KONTROL</strong><br><a href="https://app.kontrol-iot.net/" style="color:#1565c0;">https://app.kontrol-iot.net/</a></p>
+      </div>
+    `
   });
 };
 
@@ -305,7 +320,7 @@ app.post('/auth/register', async (req, res) => {
       );
     }
 
-    await sendVerificationCodeEmail(correo, verificationCode);
+    await sendVerificationCodeEmail(correo, verificationCode, nombre);
     res.status(201).json({ message: 'Usuario registrado. Código de verificación enviado.' });
   } catch (error) {
     if (error.code === '23505') {
@@ -416,7 +431,7 @@ app.post('/auth/resend-code', async (req, res) => {
     }
 
     const user = await pool.query(
-      'SELECT usr_id, estatus FROM usuario WHERE correo = $1',
+      'SELECT usr_id, nombre, estatus FROM usuario WHERE correo = $1',
       [correo]
     );
     if (user.rows.length === 0) {
@@ -431,7 +446,7 @@ app.post('/auth/resend-code', async (req, res) => {
       'UPDATE usuario SET token_verificacion = $1 WHERE correo = $2',
       [verificationCode, correo]
     );
-    await sendVerificationCodeEmail(correo, verificationCode);
+    await sendVerificationCodeEmail(correo, verificationCode, user.rows[0].nombre);
 
     return res.status(200).json({ message: 'Código reenviado.' });
   } catch (error) {

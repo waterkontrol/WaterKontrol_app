@@ -387,6 +387,20 @@ app.post('/auth/logout', isAuth, async (req, res) => {
   res.status(200).json({ message: 'Sesión cerrada.' });
 });
 
+// DELETE /auth/account - Eliminar cuenta del usuario
+app.delete('/auth/account', isAuth, async (req, res) => {
+  const userId = req.userId;
+  try {
+    await pool.query('DELETE FROM sesion WHERE usuario_id = $1', [userId]);
+    await pool.query('DELETE FROM registro WHERE usr_id = $1', [userId]);
+    await pool.query('DELETE FROM usuario WHERE usr_id = $1', [userId]);
+    res.status(200).json({ message: 'Cuenta eliminada correctamente.' });
+  } catch (error) {
+    console.error('Error al eliminar cuenta:', error);
+    res.status(500).json({ message: 'Error interno al eliminar la cuenta.' });
+  }
+});
+
 // POST /auth/verify-code
 app.post('/auth/verify-code', async (req, res) => {
   const { correo, codigo } = req.body;

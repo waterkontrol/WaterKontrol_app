@@ -77,6 +77,22 @@ let mqttClient;
 // Map de ACKs pendientes para configuración de nivel: baseTopic → { resolve, reject, timeout }
 const pendingNivelAck = new Map();
 
+// Comandos enviados por el usuario desde la app: serial → timeout.
+// La respuesta del circuito a un comando propio no debe generar un aviso visible:
+// el usuario está mirando la pantalla y ya sabe lo que hizo.
+const comandosRecientes = new Map();
+const VENTANA_COMANDO_MS = 30000;
+
+const marcarComandoDeUsuario = (serial) => {
+  if (!serial) return;
+  const previo = comandosRecientes.get(serial);
+  if (previo) clearTimeout(previo);
+  comandosRecientes.set(
+    serial,
+    setTimeout(() => comandosRecientes.delete(serial), VENTANA_COMANDO_MS)
+  );
+};
+
 // const connectMqtt = () => {
   
 //   const url = process.env.MQTT_BROKER_URL || 'mqtt://test.mosquitto.org';
@@ -1324,7 +1340,9 @@ console.log(req.body)
 
   mqttClient.publish(req.body.topic.concat('/in'), message, { qos: 0, retain: false }, (err) => {
     if (!err) {
-      
+      // La respuesta del circuito a este comando no debe notificar al usuario.
+      marcarComandoDeUsuario(String(req.body.topic).split('/')[2]);
+
       console.log(`✅ Mensaje enviado al topic de telemetría general: ${req.body.topic.concat('/in')}, mensaje: ${message}`);
       res.status(201).json({
         message: 'Dispositivo actualizado exitosamente.'
@@ -2031,9 +2049,15 @@ const procesarMensajesMqtt = () => {
       // Aviso visible: el sistema lo muestra con la app cerrada o en segundo plano.
       // Si nada cambió no se notifica, pero el bloque `data` igual viaja para que
       // la app sincronice su estado en vivo.
-      const cuerpoLegible = construirCuerpoNotificacion(cambios);
-      if (!cuerpoLegible) {
-        console.log(`🔕 Sin cambios de valor para ${serie}, push silenciosa.`);
+      const respondeAComandoDelUsuario = comandosRecientes.has(serie);
+      const cuerpoLegible = respondeAComandoDelUsuario
+        ? null
+        : construirCuerpoNotificacion(cambios);
+
+      if (respondeAComandoDelUsuario) {
+        console.log(`🔕 Respuesta a comando del usuario para ${serie}, push silenciosa.`);
+      } else if (!cuerpoLegible) {
+        console.log(`🔕 Sin cambios notificables para ${serie}, push silenciosa.`);
       }
       const avisoVisible = cuerpoLegible ? {
         android: {

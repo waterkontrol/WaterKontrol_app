@@ -1983,13 +1983,22 @@ const procesarMensajesMqtt = () => {
       const messageJ = JSON.parse(message.toString().replace(/'/g, '"'));
 
 
-      const result1 = await pool.query(`SELECT vlr_id, tipo, parametros.prt_id
-        FROM registro_valor 
+      const result1 = await pool.query(`SELECT vlr_id, tipo, valor, parametros.prt_id
+        FROM registro_valor
         JOIN parametros ON registro_valor.prt_id = parametros.prt_id
-        WHERE registro_valor.rgt_id = $1`, [rgt_id]); 
+        WHERE registro_valor.rgt_id = $1`, [rgt_id]);
+
+      // Solo los valores que efectivamente cambiaron ameritan un aviso visible:
+      // el circuito republica su estado continuamente aunque nada haya cambiado.
+      const cambios = {};
 
       for(const row of result1.rows){
         if(messageJ[row.tipo] === undefined) continue;
+        const valorNuevo = String(messageJ[row.tipo]).trim();
+        const valorAnterior = row.valor === null || row.valor === undefined ? null : String(row.valor).trim();
+        if (valorAnterior !== valorNuevo) {
+          cambios[row.tipo] = messageJ[row.tipo];
+        }
         console.log(`🔧 Actualizando valor [${row.tipo}] para rgt_id ${rgt_id} prt_id ${row.prt_id } con valor ${messageJ[row.tipo]}`);
         const insertQueryVal = `
           UPDATE registro_valor SET valor = $3 WHERE rgt_id = $1 AND prt_id = $2;`;
@@ -2009,7 +2018,12 @@ const procesarMensajesMqtt = () => {
       await dbClient.query('COMMIT');
 
       // Aviso visible: el sistema lo muestra con la app cerrada o en segundo plano.
-      const cuerpoLegible = construirCuerpoNotificacion(messageJ);
+      // Si nada cambió no se notifica, pero el bloque `data` igual viaja para que
+      // la app sincronice su estado en vivo.
+      const cuerpoLegible = construirCuerpoNotificacion(cambios);
+      if (!cuerpoLegible) {
+        console.log(`🔕 Sin cambios de valor para ${serie}, push silenciosa.`);
+      }
       const avisoVisible = cuerpoLegible ? {
         android: {
           priority: 'high',

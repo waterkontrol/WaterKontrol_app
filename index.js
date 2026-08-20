@@ -1877,6 +1877,11 @@ const NOTIF_LABELS = {
   modo: 'Modo'
 };
 
+// Tipos que ameritan un aviso visible al usuario. El resto se sincroniza en
+// silencio: la app igual recibe la push y actualiza la pantalla en vivo.
+// Para notificar otro parámetro basta agregar su tipo a esta lista.
+const TIPOS_NOTIFICABLES = ['ingreso'];
+
 const formatearValorNotificacion = (tipo, valor) => {
   const v = String(valor).toLowerCase();
   if (tipo === 'bomba') {
@@ -1891,7 +1896,7 @@ const formatearValorNotificacion = (tipo, valor) => {
 /** Construye un texto legible a partir del payload del circuito. */
 const construirCuerpoNotificacion = (payload) => {
   const partes = [];
-  for (const tipo of Object.keys(NOTIF_LABELS)) {
+  for (const tipo of TIPOS_NOTIFICABLES) {
     if (payload[tipo] === undefined) continue;
     partes.push(`${NOTIF_LABELS[tipo]}: ${formatearValorNotificacion(tipo, payload[tipo])}`);
   }

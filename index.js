@@ -1955,11 +1955,17 @@ const procesarMensajesMqtt = () => {
       const rgt_id = deviceResult.rows[0].rgt_id;
 
       // Tokens Firebase solo para notificaciones (pueden no existir)
+      // DISTINCT ON evita duplicados: cada login crea una fila en `sesion`, asi que
+      // un usuario que entro varias veces tiene el mismo token repetido y recibiria
+      // una notificacion por cada fila. Se descartan ademas las sesiones vencidas.
       const tokenResult = await dbClient.query(
-        `SELECT sesion.frb_token, registro.nombre_registrado
+        `SELECT DISTINCT ON (sesion.frb_token) sesion.frb_token, registro.nombre_registrado
          FROM registro
          JOIN sesion ON registro.usr_id = sesion.usuario_id
-         WHERE registro.serial = $1 AND sesion.frb_token IS NOT NULL`,
+         WHERE registro.serial = $1
+           AND sesion.frb_token IS NOT NULL
+           AND sesion.expira_en > NOW()
+         ORDER BY sesion.frb_token, sesion.expira_en DESC`,
         [serie]
       );
       // const frb_token = deviceResult.rows[0].frb_token;

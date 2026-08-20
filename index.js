@@ -101,7 +101,11 @@ const connectMqtt = async () => {
   const result = await pool.query('SELECT topic, usr_id FROM registro');
 
   const url = process.env.MQTT_BROKER_URL || 'mqtt://test.mosquitto.org';
-  mqttClient = mqtt.connect(url);
+  const options = {
+    username: process.env.MQTT_USERNAME || '',
+    password: process.env.MQTT_PASSWORD || '',
+  };
+  mqttClient = mqtt.connect(url, options);
 
   mqttClient.on('connect', () => {
     console.log('✅ Conexión a MQTT Broker exitosa.');
@@ -1865,6 +1869,35 @@ app.patch('/api/dispositivo/horarios/:horario_id', async (req, res) => {
 // PROCESAMIENTO DE MENSAJES MQTT
 // ===================================================================================
 
+// Etiquetas legibles para el cuerpo de las notificaciones push
+const NOTIF_LABELS = {
+  bomba: 'Bomba',
+  ingreso: 'Ingreso de agua',
+  nivel: 'Nivel',
+  modo: 'Modo'
+};
+
+const formatearValorNotificacion = (tipo, valor) => {
+  const v = String(valor).toLowerCase();
+  if (tipo === 'bomba') {
+    return ['on', '1', 'si', 'true'].includes(v) ? 'encendida' : 'apagada';
+  }
+  if (tipo === 'ingreso') {
+    return v === 'si' ? 'activo' : 'inactivo';
+  }
+  return String(valor);
+};
+
+/** Construye un texto legible a partir del payload del circuito. */
+const construirCuerpoNotificacion = (payload) => {
+  const partes = [];
+  for (const tipo of Object.keys(NOTIF_LABELS)) {
+    if (payload[tipo] === undefined) continue;
+    partes.push(`${NOTIF_LABELS[tipo]}: ${formatearValorNotificacion(tipo, payload[tipo])}`);
+  }
+  return partes.length > 0 ? partes.join(' · ') : null;
+};
+
 const procesarMensajesMqtt = () => {
   if (!mqttClient) return;
   console.log('🔧 Iniciando procesamiento de mensajes MQTT...');
@@ -1886,13 +1919,9 @@ const procesarMensajesMqtt = () => {
     // if (parts.length !== 3 || parts[2] !== 'telemetria') return;
     const serie = parts[2];
 
-    // const msg = {
-    //   notification: {
-    //     title: topic,
-    //     body: message.toString(),
-    //   },
-    // };
-
+    // El bloque `data` lo consume la app para sincronizar el estado del dispositivo.
+    // El bloque `notification` se agrega más abajo, una vez parseado el payload,
+    // para que el sistema muestre un aviso legible con la app cerrada.
     const msg = {
       data: {
         title: topic,
@@ -1927,7 +1956,10 @@ const procesarMensajesMqtt = () => {
 
       // Tokens Firebase solo para notificaciones (pueden no existir)
       const tokenResult = await dbClient.query(
-        'SELECT sesion.frb_token FROM registro JOIN sesion ON registro.usr_id = sesion.usuario_id WHERE registro.serial = $1 AND sesion.frb_token IS NOT NULL',
+        `SELECT sesion.frb_token, registro.nombre_registrado
+         FROM registro
+         JOIN sesion ON registro.usr_id = sesion.usuario_id
+         WHERE registro.serial = $1 AND sesion.frb_token IS NOT NULL`,
         [serie]
       );
       // const frb_token = deviceResult.rows[0].frb_token;
@@ -1976,9 +2008,33 @@ const procesarMensajesMqtt = () => {
 
       await dbClient.query('COMMIT');
 
+      // Aviso visible: el sistema lo muestra con la app cerrada o en segundo plano.
+      const cuerpoLegible = construirCuerpoNotificacion(messageJ);
+      const avisoVisible = cuerpoLegible ? {
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'kontrol-dispositivos',
+            sound: 'default'
+          }
+        },
+        apns: {
+          payload: {
+            aps: { sound: 'default', badge: 1 }
+          }
+        }
+      } : {};
+
       for (const row of tokenResult.rows){
         console.log('🔧 Enviando notificación a token:', row.frb_token);
-        admin.messaging().send({...msg, token: row.frb_token
+        // El título usa el nombre que cada usuario le puso a SU registro.
+        const notificacion = cuerpoLegible ? {
+          notification: {
+            title: row.nombre_registrado || serie,
+            body: cuerpoLegible
+          }
+        } : {};
+        admin.messaging().send({...msg, ...avisoVisible, ...notificacion, token: row.frb_token
           })
           .then((response) => {
               console.log('✅ Notificación enviada exitosamente:', response);
